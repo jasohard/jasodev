@@ -1,1 +1,302 @@
-<!DOCTYPE html><title>Hi</title>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pendulum Flows</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0a0a;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #canvas-container canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <script>
+        // ═══════════════════════════════════════════════════════════════════════
+        // PENDULUM FLOWS - Algorithmic Art
+        // Philosophy: The world swings between extremes - order and chaos,
+        // growth and decay, tension and release. This algorithm visualizes
+        // the complex interplay of opposing forces through coupled oscillators
+        // that create emergent patterns of flow and counterflow.
+        // ═══════════════════════════════════════════════════════════════════════
+
+        let params = {
+            seed: 42,
+            oscillatorCount: 18,
+            particlesPerOscillator: 180,
+            couplingStrength: 0.15,
+            dampingFactor: 0.985,
+            noiseInfluence: 0.008,
+            phaseShift: 0.618, // Golden ratio
+            colorCycleSpeed: 0.0003,
+            trailAlpha: 12
+        };
+
+        let oscillators = [];
+        let particles = [];
+        let time = 0;
+
+        function setup() {
+            let size = min(windowWidth, windowHeight) * 0.95;
+            let canvas = createCanvas(size, size);
+            canvas.parent('canvas-container');
+            
+            randomSeed(params.seed);
+            noiseSeed(params.seed);
+            
+            background(10, 10, 12);
+            
+            // Initialize coupled oscillators arranged in a circle
+            for (let i = 0; i < params.oscillatorCount; i++) {
+                let angle = (TWO_PI / params.oscillatorCount) * i;
+                let radius = width * 0.35;
+                let x = width / 2 + cos(angle) * radius;
+                let y = height / 2 + sin(angle) * radius;
+                
+                oscillators.push(new Oscillator(x, y, angle, i));
+            }
+            
+            // Create particles influenced by oscillators
+            for (let i = 0; i < params.oscillatorCount; i++) {
+                for (let j = 0; j < params.particlesPerOscillator; j++) {
+                    particles.push(new Particle(oscillators[i], i));
+                }
+            }
+        }
+
+        function draw() {
+            // Subtle fade for trails
+            fill(10, 10, 12, params.trailAlpha);
+            noStroke();
+            rect(0, 0, width, height);
+            
+            // Update oscillators with coupling
+            for (let osc of oscillators) {
+                osc.applyForces(oscillators);
+                osc.update();
+            }
+            
+            // Update and draw particles
+            for (let p of particles) {
+                p.update();
+                p.display();
+            }
+            
+            time += 0.01;
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // OSCILLATOR CLASS - Represents a pendulum in the system
+        // ═══════════════════════════════════════════════════════════════════════
+
+        class Oscillator {
+            constructor(x, y, baseAngle, index) {
+                this.homeX = x;
+                this.homeY = y;
+                this.x = x;
+                this.y = y;
+                this.vx = 0;
+                this.vy = 0;
+                this.baseAngle = baseAngle;
+                this.index = index;
+                this.phase = index * params.phaseShift;
+                this.amplitude = random(30, 80);
+                this.frequency = random(0.008, 0.02);
+            }
+            
+            applyForces(allOscillators) {
+                // Spring force back to home position
+                let dx = this.homeX - this.x;
+                let dy = this.homeY - this.y;
+                let springForce = 0.02;
+                this.vx += dx * springForce;
+                this.vy += dy * springForce;
+                
+                // Coupling with neighboring oscillators
+                let leftIndex = (this.index - 1 + params.oscillatorCount) % params.oscillatorCount;
+                let rightIndex = (this.index + 1) % params.oscillatorCount;
+                
+                let leftOsc = allOscillators[leftIndex];
+                let rightOsc = allOscillators[rightIndex];
+                
+                // Attract to average position of neighbors
+                let avgX = (leftOsc.x + rightOsc.x) / 2;
+                let avgY = (leftOsc.y + rightOsc.y) / 2;
+                
+                this.vx += (avgX - this.x) * params.couplingStrength;
+                this.vy += (avgY - this.y) * params.couplingStrength;
+                
+                // Noise influence for organic variation
+                let noiseVal = noise(this.x * 0.01, this.y * 0.01, time * 0.5);
+                let noiseAngle = noiseVal * TWO_PI * 2;
+                this.vx += cos(noiseAngle) * params.noiseInfluence;
+                this.vy += sin(noiseAngle) * params.noiseInfluence;
+                
+                // Periodic driving force (the pendulum swing)
+                let drive = sin(time * this.frequency + this.phase) * this.amplitude * 0.001;
+                let driveAngle = this.baseAngle + HALF_PI;
+                this.vx += cos(driveAngle) * drive;
+                this.vy += sin(driveAngle) * drive;
+            }
+            
+            update() {
+                this.vx *= params.dampingFactor;
+                this.vy *= params.dampingFactor;
+                this.x += this.vx;
+                this.y += this.vy;
+            }
+            
+            getInfluence(px, py) {
+                let dx = this.x - px;
+                let dy = this.y - py;
+                let dist = sqrt(dx * dx + dy * dy);
+                let angle = atan2(dy, dx);
+                let strength = 1 / (1 + dist * 0.01);
+                return createVector(cos(angle) * strength, sin(angle) * strength);
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // PARTICLE CLASS - Flows through the field created by oscillators
+        // ═══════════════════════════════════════════════════════════════════════
+
+        class Particle {
+            constructor(oscillator, groupIndex) {
+                this.x = oscillator.homeX + random(-20, 20);
+                this.y = oscillator.homeY + random(-20, 20);
+                this.vx = 0;
+                this.vy = 0;
+                this.groupIndex = groupIndex;
+                this.hue = (groupIndex / params.oscillatorCount) * 360;
+                this.life = random(200, 400);
+                this.maxLife = this.life;
+                this.history = [];
+                this.maxHistory = 8;
+            }
+            
+            update() {
+                // Store position history for trails
+                this.history.push({x: this.x, y: this.y});
+                if (this.history.length > this.maxHistory) {
+                    this.history.shift();
+                }
+                
+                // Accumulate forces from all oscillators
+                let fx = 0;
+                let fy = 0;
+                
+                for (let osc of oscillators) {
+                    let influence = osc.getInfluence(this.x, this.y);
+                    fx += influence.x;
+                    fy += influence.y;
+                }
+                
+                // Add flow field based on noise
+                let noiseAngle = noise(this.x * 0.003, this.y * 0.003, time * 0.3) * TWO_PI * 3;
+                fx += cos(noiseAngle) * 0.3;
+                fy += sin(noiseAngle) * 0.3;
+                
+                // Apply forces
+                this.vx += fx * 0.5;
+                this.vy += fy * 0.5;
+                
+                // Damping
+                this.vx *= 0.95;
+                this.vy *= 0.95;
+                
+                // Update position
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                // Decrease life
+                this.life--;
+                
+                // Respawn if dead or out of bounds
+                if (this.life <= 0 || this.x < 0 || this.x > width || this.y < 0 || this.y > height) {
+                    this.respawn();
+                }
+            }
+            
+            respawn() {
+                let osc = oscillators[this.groupIndex];
+                this.x = osc.homeX + random(-30, 30);
+                this.y = osc.homeY + random(-30, 30);
+                this.vx = 0;
+                this.vy = 0;
+                this.life = random(200, 400);
+                this.maxLife = this.life;
+                this.history = [];
+            }
+            
+            display() {
+                let lifeRatio = this.life / this.maxLife;
+                let alpha = lifeRatio * 200;
+                
+                // Color shifts over time
+                let hueShift = (time * params.colorCycleSpeed * 360) % 360;
+                let currentHue = (this.hue + hueShift) % 360;
+                
+                // Draw trail
+                noFill();
+                for (let i = 0; i < this.history.length - 1; i++) {
+                    let ratio = i / this.history.length;
+                    let trailAlpha = alpha * ratio * 0.7;
+                    
+                    // Pastel colors - lower saturation, higher brightness
+                    let speed = sqrt(this.vx * this.vx + this.vy * this.vy);
+                    let saturation = constrain(speed * 20, 35, 65);
+                    let brightness = constrain(75 + speed * 15, 80, 100);
+                    
+                    stroke(currentHue, saturation, brightness, trailAlpha);
+                    strokeWeight(1 + ratio * 1.5);
+                    
+                    let p1 = this.history[i];
+                    let p2 = this.history[i + 1];
+                    line(p1.x, p1.y, p2.x, p2.y);
+                }
+                
+                // Draw particle head
+                let speed = sqrt(this.vx * this.vx + this.vy * this.vy);
+                let saturation = constrain(speed * 20, 40, 70);
+                let brightness = constrain(80 + speed * 15, 85, 100);
+                
+                fill(currentHue, saturation, brightness, alpha);
+                noStroke();
+                circle(this.x, this.y, 2 + speed * 0.5);
+            }
+        }
+
+        function windowResized() {
+            let size = min(windowWidth, windowHeight) * 0.95;
+            resizeCanvas(size, size);
+            background(10, 10, 12);
+        }
+
+        // Use HSB color mode for easier color manipulation
+        colorMode(HSB, 360, 100, 100, 255);
+    </script>
+</body>
+</html>
