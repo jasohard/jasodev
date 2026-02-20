@@ -4,6 +4,7 @@ import PlinkoThumbnail from '../../components/thumbnails/PlinkoThumbnail.tsx'
 import PinballThumbnail from '../../components/thumbnails/PinballThumbnail.tsx'
 import VectorThumbnail from '../../components/thumbnails/VectorThumbnail.tsx'
 import TrigThumbnail from '../../components/thumbnails/TrigThumbnail.tsx'
+import SlopeSurferThumbnail from '../../components/thumbnails/SlopeSurferThumbnail.tsx'
 import styles from './HomePage.module.css'
 
 export default function HomePage() {
@@ -18,6 +19,12 @@ export default function HomePage() {
 
       <section className={styles.grid} aria-label="Available games">
         <GameCard
+          to="/slope-surfer"
+          title="Slope Surfer"
+          description="Ride a curve where your board IS the tangent line and your speed IS |f'(x)|. Shape the terrain, collect gems, and feel what derivatives really mean."
+          thumbnail={<SlopeSurferThumbnail />}
+        />
+        <GameCard
           to="/plinko"
           title="Plinko"
           description="Drag pegs to reshape a Plinko board and watch balls bounce with real physics. Match target distributions by sculpting the ball flow."
@@ -26,7 +33,7 @@ export default function HomePage() {
         <GameCard
           to="/vectors"
           title="Vector Voyager"
-          description="Plan a spaceship's course by drawing vectors. Navigate around asteroids, thread narrow gaps, and feel like a mathematical pilot."
+          description="Launch a ship and place gravity wells to bend its path around asteroids. A physics puzzle where you harness gravitational pull to reach the target."
           thumbnail={<VectorThumbnail />}
         />
         <GameCard

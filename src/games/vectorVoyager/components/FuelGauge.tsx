@@ -1,82 +1,84 @@
 import { memo } from 'react'
 import { BOARD_WIDTH } from '../engine'
 
-interface FuelGaugeProps {
-  fuelUsed: number
-  fuelBudget: number
+interface WellCounterProps {
+  wellCount: number
+  wellPar: number
+  maxWells: number
 }
 
-const GAUGE_WIDTH = 140
-const GAUGE_HEIGHT = 12
-const GAUGE_X = BOARD_WIDTH - GAUGE_WIDTH - 16
-const GAUGE_Y = 14
+const COUNTER_X = BOARD_WIDTH - 120
+const COUNTER_Y = 12
 
-function FuelGaugeComponent({ fuelUsed, fuelBudget }: FuelGaugeProps) {
-  if (fuelBudget <= 0) return null
+/** SVG overlay showing gravity well count and star thresholds */
+function WellCounterComponent({ wellCount, wellPar, maxWells }: WellCounterProps) {
+  const atMax = wellCount >= maxWells
 
-  const rawPct = fuelUsed / fuelBudget
-  const pct = Math.min(1, rawPct)
-  const remaining = 1 - pct
-  const isOver = rawPct > 1
-  const isLow = rawPct > 0.75
-
-  let fillColor: string
-  if (isOver) fillColor = '#f44336'
-  else if (isLow) fillColor = '#ff9800'
-  else fillColor = '#4caf50'
+  // Color based on star rating at current count
+  let color: string
+  if (wellCount <= wellPar) color = '#ffd700' // 3-star zone (gold)
+  else if (wellCount <= wellPar + 1) color = '#4caf50' // 2-star zone (green)
+  else if (wellCount <= wellPar + 2) color = '#ff9800' // 1-star zone (orange)
+  else color = '#f44336' // over max
 
   return (
     <g>
-      {/* Label */}
-      <text
-        x={GAUGE_X - 4}
-        y={GAUGE_Y + GAUGE_HEIGHT / 2 + 1}
-        fill="rgba(255,255,255,0.6)"
-        fontSize={9}
-        fontFamily="monospace"
-        textAnchor="end"
-        dominantBaseline="middle"
-      >
-        Fuel
-      </text>
-
-      {/* Background */}
-      <rect
-        x={GAUGE_X}
-        y={GAUGE_Y}
-        width={GAUGE_WIDTH}
-        height={GAUGE_HEIGHT}
-        rx={6}
-        fill="rgba(255,255,255,0.08)"
-      />
-
-      {/* Fill */}
-      <rect
-        x={GAUGE_X}
-        y={GAUGE_Y}
-        width={Math.max(0, remaining * GAUGE_WIDTH)}
-        height={GAUGE_HEIGHT}
-        rx={6}
-        fill={fillColor}
+      {/* Well icon */}
+      <circle
+        cx={COUNTER_X}
+        cy={COUNTER_Y + 5}
+        r={5}
+        fill="none"
+        stroke="#ce93d8"
+        strokeWidth={1.2}
         opacity={0.7}
-        style={{ transition: 'width 0.15s ease, fill 0.3s ease' }}
+      />
+      <circle
+        cx={COUNTER_X}
+        cy={COUNTER_Y + 5}
+        r={2}
+        fill="#ce93d8"
+        opacity={0.7}
       />
 
-      {/* Percentage text */}
+      {/* Count */}
       <text
-        x={GAUGE_X + GAUGE_WIDTH / 2}
-        y={GAUGE_Y + GAUGE_HEIGHT / 2 + 1}
-        fill="#fff"
-        fontSize={8}
+        x={COUNTER_X + 12}
+        y={COUNTER_Y + 9}
+        fill={color}
+        fontSize={11}
         fontWeight="bold"
         fontFamily="monospace"
-        textAnchor="middle"
-        dominantBaseline="middle"
       >
-        {Math.round(fuelUsed)}/{fuelBudget}
+        {wellCount}/{maxWells}
       </text>
+
+      {/* Par label */}
+      <text
+        x={COUNTER_X + 50}
+        y={COUNTER_Y + 9}
+        fill="rgba(255,255,255,0.45)"
+        fontSize={9}
+        fontFamily="monospace"
+      >
+        par {wellPar}
+      </text>
+
+      {/* Max wells warning */}
+      {atMax && (
+        <text
+          x={COUNTER_X + 12}
+          y={COUNTER_Y + 22}
+          fill="#f44336"
+          fontSize={8}
+          fontFamily="monospace"
+          opacity={0.8}
+        >
+          MAX
+        </text>
+      )}
     </g>
   )
 }
 
-export default memo(FuelGaugeComponent)
+export default memo(WellCounterComponent)

@@ -1,0 +1,116 @@
+/* ============================================
+   Slope Surfer — Main game layout
+   ============================================ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  min-height: 100%;
+  animation: pageIn 0.3s ease-out;
+}
+
+.header {
+  text-align: center;
+  width: 100%;
+  max-width: 600px;
+}
+
+.title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--color-text, #e8e8f0);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.levelLabel {
+  font-size: 0.85rem;
+  color: #00e5ff;
+  margin: 0.1rem 0 0;
+  font-weight: 600;
+}
+
+.subtitle {
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #8888a0);
+  margin: 0.1rem 0 0;
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(0, 229, 255, 0.06);
+  border: 1px solid rgba(0, 229, 255, 0.1);
+  border-radius: 8px;
+  padding: 0.35rem 0.75rem;
+  max-width: 600px;
+  text-align: center;
+  animation: hintIn 0.4s ease-out;
+}
+
+.boardWrapper {
+  width: 100%;
+  max-width: 600px;
+  position: relative;
+}
+
+.board {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  display: block;
+}
+
+@keyframes pageIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes hintIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive adjustments */
+
+@media (max-width: 480px) {
+  .page {
+    padding: 0.25rem;
+    gap: 0.35rem;
+  }
+
+  .title {
+    font-size: 1.1rem;
+  }
+
+  .hint {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.5rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .page {
+    padding: 1rem;
+    gap: 0.75rem;
+  }
+
+  .title {
+    font-size: 1.5rem;
+  }
+}
