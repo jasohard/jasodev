@@ -110,17 +110,9 @@
   border-color: var(--color-border, #2a2a3e);
 }
 
-.retryBtn:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
 .nextBtn {
   background: #4caf50;
   color: #fff;
-}
-
-.nextBtn:hover {
-  background: #66bb6a;
 }
 
 .selectBtn {
@@ -129,8 +121,18 @@
   font-size: 0.8rem;
 }
 
-.selectBtn:hover {
-  color: var(--color-text, #e8e8f0);
+@media (hover: hover) {
+  .retryBtn:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .nextBtn:hover {
+    background: #66bb6a;
+  }
+
+  .selectBtn:hover {
+    color: var(--color-text, #e8e8f0);
+  }
 }
 
 @keyframes fadeIn {

@@ -38,9 +38,11 @@
   font-family: var(--font-mono, monospace);
 }
 
-.toolBtn:hover {
-  background: var(--color-surface-hover, #1c1c30);
-  color: var(--color-text, #e8e8f0);
+@media (hover: hover) {
+  .toolBtn:hover {
+    background: var(--color-surface-hover, #1c1c30);
+    color: var(--color-text, #e8e8f0);
+  }
 }
 
 .toolBtn.active {
@@ -68,9 +70,11 @@
   animation: surfAppear 0.3s ease-out;
 }
 
-.surfBtn:hover {
-  transform: scale(1.05);
-  box-shadow: 0 6px 20px rgba(0, 229, 255, 0.35);
+@media (hover: hover) {
+  .surfBtn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(0, 229, 255, 0.35);
+  }
 }
 
 .surfBtn:active {

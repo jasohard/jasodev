@@ -99,7 +99,6 @@ export interface GameState {
 export type GameAction =
   | { type: 'DRAG_CONTROL_POINT'; id: number; y: number }
   | { type: 'LAUNCH_SURFER' }
-  | { type: 'TICK'; dt: number; curveY: (x: number) => number; derivative: (x: number) => number }
   | { type: 'COLLECT_GEM'; gemId: number; comboMultiplier: number }
   | { type: 'LAND_SUCCESS'; precision: number; rideScore: number; rideGems: Set<number>; rideTime: number; rideCombo: number }
   | { type: 'LAND_FAILED'; rideScore: number; rideGems: Set<number>; rideTime: number }

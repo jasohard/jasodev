@@ -48,9 +48,11 @@
   position: relative;
 }
 
-.card:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: #00e5ff;
+@media (hover: hover) {
+  .card:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: #00e5ff;
+  }
 }
 
 .card.current {
@@ -110,8 +112,10 @@
   transition: background 0.15s ease;
 }
 
-.backBtn:hover {
-  background: rgba(255, 255, 255, 0.08);
+@media (hover: hover) {
+  .backBtn:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
 }
 
 @keyframes fadeIn {

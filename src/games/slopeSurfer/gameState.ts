@@ -77,22 +77,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         particles: [],
       }
 
-    case 'TICK': {
-      if (state.phase !== 'riding') return state
-      const speed = action.derivative
-        ? Math.abs(action.derivative(state.surferX))
-        : 0
-      return {
-        ...state,
-        surferX: state.surferX + (30 * Math.abs(speed) + 5) * action.dt,
-        surferSpeed: 30 * Math.abs(speed) + 5,
-        rideTime: state.rideTime + action.dt,
-        // Decay combo timer
-        comboTimer: Math.max(0, state.comboTimer - action.dt),
-        comboCount: state.comboTimer - action.dt <= 0 ? 0 : state.comboCount,
-      }
-    }
-
     case 'COLLECT_GEM': {
       const collected = new Set(state.gemsCollected)
       collected.add(action.gemId)

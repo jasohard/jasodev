@@ -23,7 +23,7 @@ function TargetZoneComponent({ target, reached }: TargetZoneProps) {
         y={target.yCenter - target.tolerance}
         width={width}
         height={target.tolerance * 2}
-        fill={reached ? '#4caf50' : '#4caf50'}
+        fill={reached ? '#66bb6a' : '#4caf50'}
         opacity={reached ? 0.3 : 0.12}
         rx={3}
         style={{ transition: 'opacity 0.3s ease' }}
