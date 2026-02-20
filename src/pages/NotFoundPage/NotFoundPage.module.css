@@ -1,0 +1,46 @@
+.page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xl);
+  text-align: center;
+}
+
+.code {
+  font-size: 4rem;
+  font-weight: 800;
+  color: var(--color-accent);
+  line-height: 1;
+  margin-bottom: var(--space-sm);
+}
+
+.message {
+  font-size: 1.1rem;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-xl);
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap-target-min);
+  padding: var(--space-sm) var(--space-lg);
+  background: var(--color-accent);
+  color: #fff;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: background var(--transition-fast);
+}
+
+.link:active {
+  background: var(--color-accent-hover);
+}
+
+@media (hover: hover) {
+  .link:hover {
+    background: var(--color-accent-hover);
+  }
+}

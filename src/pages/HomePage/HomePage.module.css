@@ -1,0 +1,74 @@
+/* Mobile-first game hub layout */
+
+.page {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-lg) var(--space-md);
+}
+
+/* Hero */
+.hero {
+  margin-bottom: var(--space-xl);
+}
+
+.heading {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: var(--space-xs);
+}
+
+.subtitle {
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+}
+
+/* Game card grid - mobile: single column */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-md);
+}
+
+/* sm: 480px - still single column but wider cards */
+@media (min-width: 480px) {
+  .page {
+    padding: var(--space-xl) var(--space-lg);
+  }
+
+  .heading {
+    font-size: 1.75rem;
+  }
+
+  .grid {
+    gap: var(--space-lg);
+  }
+}
+
+/* md: 768px - two columns */
+@media (min-width: 768px) {
+  .page {
+    padding: var(--space-2xl) var(--space-xl);
+  }
+
+  .heading {
+    font-size: 2rem;
+  }
+
+  .hero {
+    margin-bottom: var(--space-2xl);
+  }
+
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-lg);
+  }
+}
+
+/* lg: 1024px - three columns */
+@media (min-width: 1024px) {
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

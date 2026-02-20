@@ -1,0 +1,25 @@
+import GameCard from '../../components/GameCard/GameCard.tsx'
+import PendulumThumbnail from '../../components/thumbnails/PendulumThumbnail.tsx'
+import styles from './HomePage.module.css'
+
+export default function HomePage() {
+  return (
+    <div className={styles.page}>
+      <section className={styles.hero}>
+        <h1 className={styles.heading}>Game Hub</h1>
+        <p className={styles.subtitle}>
+          A collection of browser games and interactive art
+        </p>
+      </section>
+
+      <section className={styles.grid} aria-label="Available games">
+        <GameCard
+          to="/pendulum"
+          title="Pendulum Flows"
+          description="Algorithmic art exploring the interplay of coupled oscillators and emergent flow patterns."
+          thumbnail={<PendulumThumbnail />}
+        />
+      </section>
+    </div>
+  )
+}
