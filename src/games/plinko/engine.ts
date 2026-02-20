@@ -19,13 +19,13 @@ export const PEG_ZONE_TOP = 60
 export const PEG_ZONE_BOTTOM = 490
 
 // ─── Physics constants ───────────────────────────────────────────
-const GRAVITY = 420 // px/s^2
+const GRAVITY = 336 // px/s^2 — 20% lighter
 const BALL_RADIUS = 4
 const DEFAULT_PEG_RADIUS = 9
 const BUMPER_PEG_RADIUS = 14
-const RESTITUTION = 0.83 // +20% more
+const RESTITUTION = 1.0 // +20% bouncier
 const BUMPER_RESTITUTION = 1.0
-const WALL_RESTITUTION = 0.55
+const WALL_RESTITUTION = 0.66
 const RANDOM_DEFLECTION = 0.11 // radians (~6.3°)
 const MAX_BALL_SPEED = 550
 const BALL_TIMEOUT = 14 // seconds
