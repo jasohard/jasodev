@@ -101,8 +101,8 @@ export type GameAction =
   | { type: 'LAUNCH_SURFER' }
   | { type: 'TICK'; dt: number; curveY: (x: number) => number; derivative: (x: number) => number }
   | { type: 'COLLECT_GEM'; gemId: number; comboMultiplier: number }
-  | { type: 'LAND_SUCCESS'; precision: number }
-  | { type: 'LAND_FAILED' }
+  | { type: 'LAND_SUCCESS'; precision: number; rideScore: number; rideGems: Set<number>; rideTime: number; rideCombo: number }
+  | { type: 'LAND_FAILED'; rideScore: number; rideGems: Set<number>; rideTime: number }
   | { type: 'RETRY_LEVEL' }
   | { type: 'RESET_TERRAIN'; level: LevelConfig }
   | { type: 'SELECT_LEVEL'; level: LevelConfig }

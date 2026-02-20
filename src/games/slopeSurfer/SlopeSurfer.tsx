@@ -7,6 +7,9 @@
  *
  * Players drag control points to reshape terrain, then launch
  * the surfer to collect gems and reach a target zone.
+ *
+ * Animation uses refs for mutable game state to avoid stale closures
+ * in requestAnimationFrame loops.
  */
 
 import { useReducer, useCallback, useRef, useEffect, useMemo, useState } from 'react'
@@ -23,31 +26,51 @@ import {
   createGemBurst,
   createLandingBurst,
   createSpeedTrail,
+  updateParticles,
   comboMultiplier,
   comboColor,
   BOARD_WIDTH,
   BOARD_HEIGHT,
 } from './engine'
+import type { Vec2, Particle } from './types'
 
 import Terrain from './components/Terrain'
 import ControlPoints from './components/ControlPoints'
 import Surfer from './components/Surfer'
-import Gems from './components/Gems'
+import GemsComponent from './components/Gems'
 import TargetZoneComponent from './components/TargetZone'
 import SpeedOverlay from './components/SpeedOverlay'
 import HUD from './components/HUD'
 import DerivativeGraph from './components/DerivativeGraph'
-import Particles from './components/Particles'
+import ParticlesComponent from './components/Particles'
 import Controls from './components/Controls'
 import LevelSelect from './components/LevelSelect'
 import LevelComplete from './components/LevelComplete'
 import ScorePopup from './components/ScorePopup'
 import type { ScorePopupItem } from './components/ScorePopup'
-import type { Vec2 } from './types'
 
 import styles from './SlopeSurfer.module.css'
 
 let popupIdCounter = 0
+
+/**
+ * Mutable animation state stored in a ref to avoid stale closures.
+ * Synced back to React state on each frame via setState.
+ */
+interface AnimState {
+  x: number
+  speed: number
+  derivative: number
+  rideTime: number
+  gemsCollected: Set<number>
+  comboCount: number
+  comboTimer: number
+  score: number
+  particles: Particle[]
+  boardFlash: boolean
+  shakeOffset: Vec2
+  phase: 'riding' | 'done'
+}
 
 export default function SlopeSurfer() {
   const [currentLevelId, setCurrentLevelId] = useState(1)
@@ -64,6 +87,22 @@ export default function SlopeSurfer() {
   const animRef = useRef(0)
   const lastTimeRef = useRef(0)
   const speedTrailTimer = useRef(0)
+  const animStateRef = useRef<AnimState | null>(null)
+
+  // ─── Render state (updated each frame from animStateRef) ──────────
+
+  const [renderState, setRenderState] = useState({
+    surferX: 0,
+    surferSpeed: 0,
+    surferDerivative: 0,
+    rideTime: 0,
+    gemsCollected: new Set<number>(),
+    comboCount: 0,
+    score: 0,
+    particles: [] as Particle[],
+    boardFlash: false,
+    shakeOffset: { x: 0, y: 0 } as Vec2,
+  })
 
   // ─── Build the interpolation curve from control points ────────────
 
@@ -76,16 +115,31 @@ export default function SlopeSurfer() {
     return buildMonotoneCubic(allPoints)
   }, [level.startPoint, level.endPoint, state.controlPoints])
 
+  // Keep curveFunc in a ref so the animation loop can access it
+  const curveFuncRef = useRef(curveFunc)
+  curveFuncRef.current = curveFunc
+
+  const levelRef = useRef(level)
+  levelRef.current = level
+
   // ─── Derivative function ──────────────────────────────────────────
 
-  const derivativeFunc = useCallback(
-    (x: number) => numericalDerivative(curveFunc, x),
-    [curveFunc]
-  )
-
-  // Current derivative and speed at surfer position
-  const currentDerivative = derivativeFunc(state.surferX)
-  const currentSpeed = surferSpeed(currentDerivative, level.speedMultiplier)
+  // Surfer position values — use render state during riding, state otherwise
+  const isRiding = state.phase === 'riding'
+  const displayX = isRiding ? renderState.surferX : state.surferX
+  const displayDerivative = isRiding
+    ? renderState.surferDerivative
+    : numericalDerivative(curveFunc, state.surferX)
+  const displaySpeed = isRiding
+    ? renderState.surferSpeed
+    : surferSpeed(displayDerivative, level.speedMultiplier)
+  const displayGems = isRiding ? renderState.gemsCollected : state.gemsCollected
+  const displayCombo = isRiding ? renderState.comboCount : state.comboCount
+  const displayScore = isRiding ? renderState.score : state.score
+  const displayRideTime = isRiding ? renderState.rideTime : state.rideTime
+  const displayParticles = isRiding ? renderState.particles : state.particles
+  const displayBoardFlash = isRiding ? renderState.boardFlash : state.boardFlash
+  const displayShake = isRiding ? renderState.shakeOffset : state.shakeOffset
 
   // Stars for display
   const levelGems = level.gems
@@ -119,77 +173,136 @@ export default function SlopeSurfer() {
     return () => { document.title = 'jasodev' }
   }, [level.name])
 
-  // ─── Animation Loop ──────────────────────────────────────────────
+  // ─── Animation Loop (ref-based, no stale closures) ────────────────
 
   const animLoop = useCallback((timestamp: number) => {
+    const anim = animStateRef.current
+    if (!anim || anim.phase !== 'riding') return
+
     if (lastTimeRef.current === 0) {
       lastTimeRef.current = timestamp
     }
-    const dt = Math.min((timestamp - lastTimeRef.current) / 1000, 0.05) // Cap at 50ms
+    const dt = Math.min((timestamp - lastTimeRef.current) / 1000, 0.05)
     lastTimeRef.current = timestamp
+    if (dt === 0) {
+      animRef.current = requestAnimationFrame(animLoop)
+      return
+    }
 
-    // Advance surfer
-    const derivative = derivativeFunc(state.surferX)
-    const speed = surferSpeed(derivative, level.speedMultiplier)
-    const newX = state.surferX + speed * dt
+    const cf = curveFuncRef.current
+    const lev = levelRef.current
+
+    // Advance surfer position
+    const derivative = numericalDerivative(cf, anim.x)
+    const speed = surferSpeed(derivative, lev.speedMultiplier)
+    const newX = anim.x + speed * dt
+
+    // Update combo timer
+    anim.comboTimer = Math.max(0, anim.comboTimer - dt)
+    if (anim.comboTimer <= 0) {
+      anim.comboCount = 0
+    }
+
+    // Update particles
+    anim.particles = updateParticles(anim.particles, dt)
+
+    // Board flash decay
+    if (anim.boardFlash) {
+      // Will be cleared by timeout
+    }
 
     // Check if surfer has gone past the end
-    if (newX >= level.endPoint.x) {
-      // Check target landing
-      const curveY = curveFunc(level.endPoint.x)
-      if (checkTargetReached(newX, curveY, level.target)) {
-        const precision = landingPrecision(newX, level.target)
-        dispatch({ type: 'LAND_SUCCESS', precision })
+    if (newX >= lev.endPoint.x) {
+      const curveY = cf(lev.endPoint.x)
+      anim.phase = 'done'
+      anim.x = lev.endPoint.x
+
+      if (checkTargetReached(newX, curveY, lev.target)) {
+        const precision = landingPrecision(newX, lev.target)
 
         // Landing burst particles
-        const burstPos = { x: (level.target.xStart + level.target.xEnd) / 2, y: level.target.yCenter }
-        dispatch({ type: 'SPAWN_PARTICLES', particles: createLandingBurst(burstPos) })
+        const burstPos = { x: (lev.target.xStart + lev.target.xEnd) / 2, y: lev.target.yCenter }
+        anim.particles = [...anim.particles, ...createLandingBurst(burstPos)]
 
-        // Screen shake
-        dispatch({ type: 'SET_SHAKE', offset: { x: (Math.random() - 0.5) * 4, y: (Math.random() - 0.5) * 4 } })
-        setTimeout(() => dispatch({ type: 'SET_SHAKE', offset: { x: 0, y: 0 } }), 150)
-      } else if (level.autoPass) {
-        // Auto-pass tutorial levels
-        dispatch({ type: 'LAND_SUCCESS', precision: 1 })
+        // Shake
+        anim.shakeOffset = { x: (Math.random() - 0.5) * 6, y: (Math.random() - 0.5) * 6 }
+
+        // Sync final state to React
+        syncToReact(anim)
+        dispatch({
+          type: 'LAND_SUCCESS',
+          precision,
+          rideScore: anim.score,
+          rideGems: anim.gemsCollected,
+          rideTime: anim.rideTime,
+          rideCombo: anim.comboCount,
+        })
+
+        setTimeout(() => dispatch({ type: 'SET_SHAKE', offset: { x: 0, y: 0 } }), 200)
+      } else if (lev.autoPass) {
+        syncToReact(anim)
+        dispatch({
+          type: 'LAND_SUCCESS',
+          precision: 1,
+          rideScore: anim.score,
+          rideGems: anim.gemsCollected,
+          rideTime: anim.rideTime,
+          rideCombo: anim.comboCount,
+        })
       } else {
-        dispatch({ type: 'LAND_FAILED' })
+        syncToReact(anim)
+        dispatch({
+          type: 'LAND_FAILED',
+          rideScore: anim.score,
+          rideGems: anim.gemsCollected,
+          rideTime: anim.rideTime,
+        })
       }
       return
     }
 
-    // Update position via TICK
-    dispatch({
-      type: 'TICK',
-      dt,
-      curveY: curveFunc,
-      derivative: derivativeFunc,
-    })
+    // Update position
+    anim.x = newX
+    anim.speed = speed
+    anim.derivative = derivative
+    anim.rideTime += dt
 
     // Check gem collisions
-    const surferY = curveFunc(newX)
-    for (const gem of levelGems) {
-      if (!state.gemsCollected.has(gem.id)) {
+    const surferY = cf(newX)
+    const gemsToCheck = lev.gems
+    for (const gem of gemsToCheck) {
+      if (!anim.gemsCollected.has(gem.id)) {
         if (checkGemCollision({ x: newX, y: surferY }, gem)) {
-          const mult = comboMultiplier(state.comboCount + 1)
-          dispatch({ type: 'COLLECT_GEM', gemId: gem.id, comboMultiplier: mult })
+          anim.gemsCollected = new Set(anim.gemsCollected)
+          anim.gemsCollected.add(gem.id)
+          anim.comboCount = anim.comboTimer > 0 ? anim.comboCount + 1 : 1
+          anim.comboTimer = 1.0
+
+          const mult = comboMultiplier(anim.comboCount)
+          const points = Math.round(100 * mult)
+          anim.score += points
 
           // Gem burst particles
-          dispatch({ type: 'SPAWN_PARTICLES', particles: createGemBurst({ x: gem.x, y: gem.y }) })
+          anim.particles = [...anim.particles, ...createGemBurst({ x: gem.x, y: gem.y })]
+
+          // Board flash
+          anim.boardFlash = true
+          setTimeout(() => {
+            if (animStateRef.current) animStateRef.current.boardFlash = false
+          }, 100)
 
           // Score popup
-          const points = Math.round(100 * mult)
-          const color = comboColor(state.comboCount + 1)
+          const color = comboColor(anim.comboCount)
           setScorePopups(prev => [
             ...prev.slice(-5),
             { id: popupIdCounter++, x: gem.x, y: gem.y - 10, text: `+${points}`, color },
           ])
 
-          // Board flash
-          setTimeout(() => dispatch({ type: 'CLEAR_BOARD_FLASH' }), 100)
-
-          // Small screen shake
-          dispatch({ type: 'SET_SHAKE', offset: { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 } })
-          setTimeout(() => dispatch({ type: 'SET_SHAKE', offset: { x: 0, y: 0 } }), 80)
+          // Small shake
+          anim.shakeOffset = { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 }
+          setTimeout(() => {
+            if (animStateRef.current) animStateRef.current.shakeOffset = { x: 0, y: 0 }
+          }, 80)
         }
       }
     }
@@ -199,26 +312,71 @@ export default function SlopeSurfer() {
     if (speed > 60 && speedTrailTimer.current > 0.08) {
       speedTrailTimer.current = 0
       const angle = Math.atan(derivative)
-      dispatch({ type: 'SPAWN_PARTICLES', particles: [createSpeedTrail({ x: newX, y: surferY }, angle)] })
+      anim.particles = [...anim.particles, createSpeedTrail({ x: newX, y: surferY }, angle)]
     }
 
-    // Update particles
-    dispatch({ type: 'UPDATE_PARTICLES', dt })
+    // Sync to React render state
+    setRenderState({
+      surferX: anim.x,
+      surferSpeed: anim.speed,
+      surferDerivative: anim.derivative,
+      rideTime: anim.rideTime,
+      gemsCollected: anim.gemsCollected,
+      comboCount: anim.comboCount,
+      score: anim.score,
+      particles: anim.particles,
+      boardFlash: anim.boardFlash,
+      shakeOffset: anim.shakeOffset,
+    })
 
     animRef.current = requestAnimationFrame(animLoop)
-  }, [state.surferX, state.gemsCollected, state.comboCount, curveFunc, derivativeFunc, level, levelGems, dispatch])
+  }, []) // No deps — all reads are from refs
 
-  // Start/stop animation loop
+  // Helper to sync final animation state back to the reducer
+  function syncToReact(anim: AnimState) {
+    // The reducer actions will handle the final state
+    // We just need the render state to show the final frame
+    setRenderState({
+      surferX: anim.x,
+      surferSpeed: anim.speed,
+      surferDerivative: anim.derivative,
+      rideTime: anim.rideTime,
+      gemsCollected: anim.gemsCollected,
+      comboCount: anim.comboCount,
+      score: anim.score,
+      particles: anim.particles,
+      boardFlash: anim.boardFlash,
+      shakeOffset: anim.shakeOffset,
+    })
+  }
+
+  // Start animation when riding begins
   useEffect(() => {
     if (state.phase === 'riding') {
+      // Initialize animation state from current state
+      animStateRef.current = {
+        x: state.surferX,
+        speed: 0,
+        derivative: 0,
+        rideTime: 0,
+        gemsCollected: new Set<number>(),
+        comboCount: 0,
+        comboTimer: 0,
+        score: 0,
+        particles: [],
+        boardFlash: false,
+        shakeOffset: { x: 0, y: 0 },
+        phase: 'riding',
+      }
       lastTimeRef.current = 0
       speedTrailTimer.current = 0
       animRef.current = requestAnimationFrame(animLoop)
     } else {
       cancelAnimationFrame(animRef.current)
+      animStateRef.current = null
     }
     return () => cancelAnimationFrame(animRef.current)
-  }, [state.phase, animLoop])
+  }, [state.phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clean up popups periodically
   useEffect(() => {
@@ -240,6 +398,8 @@ export default function SlopeSurfer() {
   }, [])
 
   const handleRetry = useCallback(() => {
+    cancelAnimationFrame(animRef.current)
+    animStateRef.current = null
     dispatch({ type: 'RESET_TERRAIN', level })
     setScorePopups([])
   }, [level])
@@ -253,10 +413,14 @@ export default function SlopeSurfer() {
   }, [])
 
   const handleLevelSelect = useCallback(() => {
+    cancelAnimationFrame(animRef.current)
+    animStateRef.current = null
     dispatch({ type: 'ENTER_LEVEL_SELECT' })
   }, [])
 
   const handleSelectLevel = useCallback((id: number) => {
+    cancelAnimationFrame(animRef.current)
+    animStateRef.current = null
     const newLevel = LEVELS.find(l => l.id === id) ?? LEVELS[0]
     setCurrentLevelId(id)
     dispatch({ type: 'SELECT_LEVEL', level: newLevel })
@@ -339,12 +503,12 @@ export default function SlopeSurfer() {
           />
 
           {/* Camera shake wrapper */}
-          <g transform={`translate(${state.shakeOffset.x}, ${state.shakeOffset.y})`}>
+          <g transform={`translate(${displayShake.x}, ${displayShake.y})`}>
             {/* Background stars and speed lines */}
             <SpeedOverlay
-              speed={currentSpeed}
-              isRiding={state.phase === 'riding'}
-              surferX={state.surferX}
+              speed={displaySpeed}
+              isRiding={isRiding}
+              surferX={displayX}
             />
 
             {/* Target zone (behind terrain) */}
@@ -362,9 +526,9 @@ export default function SlopeSurfer() {
             />
 
             {/* Gems */}
-            <Gems
+            <GemsComponent
               gems={levelGems}
-              collected={state.gemsCollected}
+              collected={displayGems}
             />
 
             {/* Control points (interactive during planning) */}
@@ -378,30 +542,30 @@ export default function SlopeSurfer() {
             {/* Surfer */}
             <Surfer
               curveFunc={curveFunc}
-              x={state.surferX}
-              speed={currentSpeed}
-              derivative={currentDerivative}
-              isRiding={state.phase === 'riding'}
-              boardFlash={state.boardFlash}
+              x={displayX}
+              speed={displaySpeed}
+              derivative={displayDerivative}
+              isRiding={isRiding}
+              boardFlash={displayBoardFlash}
             />
 
             {/* Particles */}
-            <Particles particles={state.particles} />
+            <ParticlesComponent particles={displayParticles} />
 
             {/* Score popups */}
             <ScorePopup items={scorePopups} />
 
             {/* HUD overlay */}
             <HUD
-              speed={currentSpeed}
-              derivative={currentDerivative}
-              gemsCollected={state.gemsCollected.size}
+              speed={displaySpeed}
+              derivative={displayDerivative}
+              gemsCollected={displayGems.size}
               totalGems={levelGems.length}
-              rideTime={state.rideTime}
-              comboCount={state.comboCount}
+              rideTime={displayRideTime}
+              comboCount={displayCombo}
               stars={stars}
               phase={state.phase}
-              score={state.score}
+              score={displayScore}
             />
 
             {/* Derivative graph */}
@@ -410,8 +574,8 @@ export default function SlopeSurfer() {
                 curveFunc={curveFunc}
                 xStart={level.startPoint.x}
                 xEnd={level.endPoint.x}
-                surferX={state.surferX}
-                isRiding={state.phase === 'riding'}
+                surferX={displayX}
+                isRiding={isRiding}
                 yOffset={BOARD_HEIGHT + 4}
                 graphHeight={72}
               />

@@ -109,25 +109,33 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case 'LAND_SUCCESS': {
-      const gemCount = state.gemsCollected.size
-      const comboBonus = state.comboCount > 1 ? (state.comboCount - 1) * 50 : 0
-      const score = computeScore(
+      const comboBonus = action.rideCombo > 1 ? (action.rideCombo - 1) * 50 : 0
+      const landingScore = computeScore(
         true,
-        gemCount,
+        action.rideGems.size,
         comboBonus,
-        state.rideTime,
-        null, // parTime is checked in the component
+        action.rideTime,
+        null,
         action.precision
       )
       return {
         ...state,
         phase: 'success',
-        score: state.score + score,
+        gemsCollected: action.rideGems,
+        rideTime: action.rideTime,
+        score: action.rideScore + landingScore,
+        comboCount: action.rideCombo,
       }
     }
 
     case 'LAND_FAILED':
-      return { ...state, phase: 'failed' }
+      return {
+        ...state,
+        phase: 'failed',
+        gemsCollected: action.rideGems,
+        rideTime: action.rideTime,
+        score: action.rideScore,
+      }
 
     case 'RETRY_LEVEL':
       return {
