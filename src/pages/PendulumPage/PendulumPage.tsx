@@ -16,7 +16,7 @@ export default function PendulumPage() {
           src="/pendulum.html"
           title="Pendulum Flows - Interactive algorithmic art"
           className={styles.iframe}
-          sandbox="allow-scripts"
+          sandbox="allow-scripts allow-same-origin"
           allow="autoplay"
         />
       </div>
