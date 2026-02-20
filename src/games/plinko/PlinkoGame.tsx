@@ -40,6 +40,8 @@ export default function PlinkoGame() {
   const [dropCount, setDropCount] = useState<DropCount>(50)
   const [isSimulating, setIsSimulating] = useState(false)
   const [showLevelSelect, setShowLevelSelect] = useState(false)
+  const [dropX, setDropX] = useState(() => level.dropX ?? BOARD_WIDTH / 2)
+  const [draggingDrop, setDraggingDrop] = useState(false)
 
   // Drag state
   const [draggingPegId, setDraggingPegId] = useState<string | null>(null)
@@ -156,7 +158,6 @@ export default function PlinkoGame() {
 
   // ─── Drop balls ─────────────────────────────────────────────
   const handleDrop = useCallback(() => {
-    const dropX = level.dropX ?? BOARD_WIDTH / 2
     const newBalls: Ball[] = []
     for (let i = 0; i < dropCount; i++) {
       const ball = createBall(dropX)
@@ -166,7 +167,7 @@ export default function PlinkoGame() {
     }
     ballsRef.current = [...ballsRef.current, ...newBalls]
     ensureAnimating()
-  }, [dropCount, level.dropX, ensureAnimating])
+  }, [dropCount, dropX, ensureAnimating])
 
   // ─── Reset bins ─────────────────────────────────────────────
   const handleResetBins = useCallback(() => {
@@ -203,6 +204,8 @@ export default function PlinkoGame() {
     setTotalBalls(0)
     setBalls([])
     setDraggingPegId(null)
+    setDropX(newLevel.dropX ?? BOARD_WIDTH / 2)
+    setDraggingDrop(false)
     setShowLevelSelect(false)
   }, [])
 
@@ -269,6 +272,32 @@ export default function PlinkoGame() {
     setDraggingPegId(null)
     setDragValid(true)
   }, [draggingPegId, dragValid])
+
+  // ─── Drop point drag handlers ─────────────────────────────
+  const handleDropPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      ;(e.target as Element).setPointerCapture(e.pointerId)
+      setDraggingDrop(true)
+    },
+    []
+  )
+
+  const handleDropPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!draggingDrop) return
+      const pt = toSvgCoords(e.clientX, e.clientY)
+      if (!pt) return
+      const clampedX = Math.max(WALL_LEFT + 10, Math.min(WALL_RIGHT - 10, pt.x))
+      setDropX(clampedX)
+    },
+    [draggingDrop, toSvgCoords]
+  )
+
+  const handleDropPointerUp = useCallback(() => {
+    setDraggingDrop(false)
+  }, [])
 
   // ─── Keyboard shortcuts ─────────────────────────────────────
   useEffect(() => {
@@ -418,29 +447,64 @@ export default function PlinkoGame() {
             strokeWidth="2"
           />
 
-          {/* Drop point indicator */}
-          <circle
-            cx={level.dropX ?? BOARD_WIDTH / 2}
-            cy={DROP_Y}
-            r="6"
-            fill="none"
-            stroke="rgba(255,255,255,0.3)"
-            strokeWidth="1.5"
-            strokeDasharray="3 3"
+          {/* Drop point indicator — draggable */}
+          <g
+            style={{ cursor: 'grab', touchAction: 'none' }}
+            onPointerDown={handleDropPointerDown}
+            onPointerMove={handleDropPointerMove}
+            onPointerUp={handleDropPointerUp}
           >
-            <animate
-              attributeName="r"
-              values="5;8;5"
-              dur="2s"
-              repeatCount="indefinite"
+            {/* Invisible fat touch target */}
+            <circle
+              cx={dropX}
+              cy={DROP_Y}
+              r="22"
+              fill="transparent"
             />
-          </circle>
-          <circle
-            cx={level.dropX ?? BOARD_WIDTH / 2}
-            cy={DROP_Y}
-            r="2"
-            fill="rgba(255,255,255,0.5)"
-          />
+            {/* Funnel / arrow indicator */}
+            <polygon
+              points={`${dropX - 8},${DROP_Y - 12} ${dropX + 8},${DROP_Y - 12} ${dropX},${DROP_Y - 2}`}
+              fill={draggingDrop ? 'rgba(100,200,255,0.7)' : 'rgba(255,255,255,0.4)'}
+              stroke={draggingDrop ? '#4fc3f7' : 'rgba(255,255,255,0.3)'}
+              strokeWidth="1"
+            />
+            {/* Pulsing ring */}
+            <circle
+              cx={dropX}
+              cy={DROP_Y}
+              r="6"
+              fill="none"
+              stroke={draggingDrop ? '#4fc3f7' : 'rgba(255,255,255,0.3)'}
+              strokeWidth="1.5"
+              strokeDasharray="3 3"
+            >
+              <animate
+                attributeName="r"
+                values="5;8;5"
+                dur="2s"
+                repeatCount="indefinite"
+              />
+            </circle>
+            {/* Center dot */}
+            <circle
+              cx={dropX}
+              cy={DROP_Y}
+              r="2"
+              fill={draggingDrop ? '#4fc3f7' : 'rgba(255,255,255,0.5)'}
+            />
+            {/* Horizontal guide line when dragging */}
+            {draggingDrop && (
+              <line
+                x1={WALL_LEFT}
+                y1={DROP_Y}
+                x2={WALL_RIGHT}
+                y2={DROP_Y}
+                stroke="rgba(79,195,247,0.15)"
+                strokeWidth="1"
+                strokeDasharray="4 4"
+              />
+            )}
+          </g>
 
           {/* ─── Bin dividers ──────────────────────────── */}
           {Array.from({ length: level.binCount + 1 }, (_, i) => {
