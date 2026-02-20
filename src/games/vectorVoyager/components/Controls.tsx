@@ -7,9 +7,11 @@ interface ControlsProps {
   vectorCount: number
   canLaunch: boolean
   overBudget: boolean
+  hasNextLevel: boolean
   onLaunch: () => void
   onClear: () => void
   onUndo: () => void
+  onNextLevel: () => void
 }
 
 export default function Controls({
@@ -17,9 +19,11 @@ export default function Controls({
   vectorCount,
   canLaunch,
   overBudget,
+  hasNextLevel,
   onLaunch,
   onClear,
   onUndo,
+  onNextLevel,
 }: ControlsProps) {
   // Keyboard shortcuts
   useEffect(() => {
@@ -28,19 +32,23 @@ export default function Controls({
       if (e.code === 'Space' && phase === 'planning') {
         e.preventDefault()
         if (canLaunch && !overBudget) onLaunch()
-      } else if (e.code === 'KeyR' && !e.metaKey && !e.ctrlKey && phase === 'planning') {
+      } else if (e.code === 'KeyR' && !e.metaKey && !e.ctrlKey) {
         e.preventDefault()
         onClear()
       } else if (e.code === 'KeyZ' && (e.metaKey || e.ctrlKey) && phase === 'planning') {
         e.preventDefault()
         onUndo()
+      } else if (e.code === 'KeyN' && phase === 'success' && hasNextLevel) {
+        e.preventDefault()
+        onNextLevel()
       }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [phase, canLaunch, overBudget, onLaunch, onClear, onUndo])
+  }, [phase, canLaunch, overBudget, hasNextLevel, onLaunch, onClear, onUndo, onNextLevel])
 
   const isPlanning = phase === 'planning'
+  const isLaunching = phase === 'launching'
   const showResult = phase === 'success' || phase === 'collision' || phase === 'missed'
 
   return (
@@ -73,30 +81,39 @@ export default function Controls({
           <span>Undo</span>
         </button>
 
-        {/* LAUNCH — the big one */}
-        <button
-          className={`${styles.launchBtn} ${overBudget ? styles.overBudget : ''}`}
-          onClick={isPlanning ? onLaunch : onClear}
-          disabled={isPlanning ? !canLaunch || overBudget : false}
-          aria-label={isPlanning ? 'Launch ship' : 'Clear and retry'}
-        >
-          {isPlanning ? (
-            <>
-              <span className={styles.rocket}>&#x1F680;</span>
-              <span>LAUNCH</span>
-            </>
-          ) : (
-            <>
+        {/* LAUNCH / RETRY / NEXT LEVEL */}
+        {phase === 'success' && hasNextLevel ? (
+          <button
+            className={styles.launchBtn}
+            onClick={onNextLevel}
+            aria-label="Next level"
+          >
+            <span>NEXT LEVEL</span>
+            <span className={styles.rocket}>&#x2192;</span>
+          </button>
+        ) : (
+          <button
+            className={`${styles.launchBtn} ${overBudget ? styles.overBudget : ''}`}
+            onClick={isPlanning ? onLaunch : onClear}
+            disabled={isPlanning ? !canLaunch || overBudget : isLaunching}
+            aria-label={isPlanning ? 'Launch ship' : 'Clear and retry'}
+          >
+            {isPlanning ? (
+              <>
+                <span className={styles.rocket}>&#x1F680;</span>
+                <span>LAUNCH</span>
+              </>
+            ) : (
               <span>RETRY</span>
-            </>
-          )}
-        </button>
+            )}
+          </button>
+        )}
 
         {/* Clear */}
         <button
           className={styles.secondaryBtn}
           onClick={onClear}
-          disabled={!isPlanning || vectorCount === 0}
+          disabled={isLaunching || (isPlanning && vectorCount === 0)}
           aria-label="Clear all vectors"
         >
           <svg viewBox="0 0 24 24" width={16} height={16}>

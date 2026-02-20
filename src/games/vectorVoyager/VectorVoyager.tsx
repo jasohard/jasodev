@@ -362,6 +362,12 @@ export default function VectorVoyager() {
     [resetState]
   )
 
+  const hasNextLevel = currentLevelId < LEVELS.length
+  const handleNextLevel = useCallback(() => {
+    if (!hasNextLevel) return
+    handleLevelChange(currentLevelId + 1)
+  }, [hasNextLevel, currentLevelId, handleLevelChange])
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -404,9 +410,11 @@ export default function VectorVoyager() {
         vectorCount={vectors.length}
         canLaunch={canLaunch}
         overBudget={overBudget}
+        hasNextLevel={hasNextLevel}
         onLaunch={handleLaunch}
         onClear={handleClear}
         onUndo={handleUndo}
+        onNextLevel={handleNextLevel}
       />
 
       <LevelSelect
