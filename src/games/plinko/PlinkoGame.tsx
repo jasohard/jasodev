@@ -52,6 +52,7 @@ export default function PlinkoGame() {
   const binsRef = useRef<number[]>(bins)
   const speedRef = useRef(speed)
   const isSimulatingRef = useRef(false)
+  const isMountedRef = useRef(true)
   const svgRef = useRef<SVGSVGElement>(null)
 
   // Keep refs in sync
@@ -89,6 +90,8 @@ export default function PlinkoGame() {
   const lastTimeRef = useRef(0)
 
   const animationLoop = useCallback((timestamp: number) => {
+    if (!isMountedRef.current) return
+
     if (lastTimeRef.current === 0) lastTimeRef.current = timestamp
     let dt = (timestamp - lastTimeRef.current) / 1000
     lastTimeRef.current = timestamp
@@ -106,6 +109,8 @@ export default function PlinkoGame() {
       binsRef.current.length,
       dt
     )
+
+    if (!isMountedRef.current) return
 
     // Update bins for landed balls
     if (landed.length > 0) {
@@ -287,7 +292,10 @@ export default function PlinkoGame() {
 
   // Cleanup on unmount
   useEffect(() => {
-    return () => cancelAnimationFrame(animFrameRef.current)
+    return () => {
+      isMountedRef.current = false
+      cancelAnimationFrame(animFrameRef.current)
+    }
   }, [])
 
   // ─── Computed values ────────────────────────────────────────

@@ -111,7 +111,7 @@ export function stepPhysics(
   dt: number
 ): number[] {
   const landed: number[] = []
-  const subSteps = Math.max(1, Math.ceil(dt / 0.002))
+  const subSteps = Math.max(1, Math.min(100, Math.ceil(dt / 0.002)))
   const subDt = dt / subSteps
 
   for (const ball of balls) {
@@ -155,7 +155,14 @@ export function stepPhysics(
         const dist = Math.sqrt(dx * dx + dy * dy)
         const minDist = ball.radius + peg.radius
 
-        if (dist < minDist && dist > 0.001) {
+        if (dist < minDist) {
+          // Handle coincident centers with random displacement
+          if (dist < 0.001) {
+            const randAngle = Math.random() * Math.PI * 2
+            ball.x = peg.x + minDist * Math.cos(randAngle)
+            ball.y = peg.y + minDist * Math.sin(randAngle)
+            continue
+          }
           // Push ball out
           const nx = dx / dist
           const ny = dy / dist
