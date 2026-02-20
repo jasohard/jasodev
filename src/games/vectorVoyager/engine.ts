@@ -80,6 +80,8 @@ export function segmentCircleIntersection(
   const f = vecSub(p1, center)
 
   const a = d.x * d.x + d.y * d.y
+  if (a === 0) return null // Degenerate segment (zero length)
+
   const b = 2 * (f.x * d.x + f.y * d.y)
   const c = f.x * f.x + f.y * f.y - radius * radius
 

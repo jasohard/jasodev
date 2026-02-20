@@ -103,10 +103,11 @@ export default function VectorVoyager() {
     (e: React.PointerEvent) => {
       if (phase !== 'planning') return
       // Save SVG ref from the event's closest SVG
-      const targetEl = e.target as Element
-      const svg = targetEl.closest('svg') as SVGSVGElement | null
+      const targetEl = e.target as Element | null
+      if (!targetEl) return
+      const svg = targetEl.closest?.('svg') as SVGSVGElement | null
       if (svg) svgRef.current = svg
-      targetEl.setPointerCapture?.(e.pointerId)
+      ;(targetEl as Element).setPointerCapture?.(e.pointerId)
 
       const pt = pointerToSVG(e)
 
@@ -259,7 +260,10 @@ export default function VectorVoyager() {
           : 1 - Math.pow(-2 * segT + 2, 2) / 2
 
       const v = vectors[segIdx]
-      if (!v) return
+      if (!v) {
+        setPhase('missed')
+        return
+      }
 
       const d = vecSub(v.end, v.start)
       const pos: Vec2 = {
@@ -278,7 +282,8 @@ export default function VectorVoyager() {
         trailParticles = [
           ...trailParticles
             .filter((p) => p.opacity > 0.05)
-            .map((p) => ({ ...p, opacity: p.opacity * 0.82 })),
+            .map((p) => ({ ...p, opacity: p.opacity * 0.82 }))
+            .slice(-40), // Cap trail length to prevent unbounded growth
           {
             x: pos.x - norm.x * 10 + (Math.random() - 0.5) * 5,
             y: pos.y + norm.y * 10 + (Math.random() - 0.5) * 5,
