@@ -142,6 +142,7 @@ const EPSILON = 0.01 // small offset to prevent re-intersection with the same wa
 /**
  * Compute the full ball path through a room.
  * Returns the path (all points) and bounce info at each wall collision.
+ * minBounces: minimum bounces required before a target hit counts.
  */
 export function computeBallPath(
   startPos: Vec2,
@@ -149,7 +150,8 @@ export function computeBallPath(
   walls: Wall[],
   reflectors: Reflector[],
   targets: Target[],
-  maxBounces: number
+  maxBounces: number,
+  minBounces: number = 0
 ): BallPath {
   const allWalls = [...walls, ...reflectors.map(reflectorToWall)]
   const points: Vec2[] = [startPos]
@@ -190,11 +192,15 @@ export function computeBallPath(
     }
 
     // Check if ball passes through any target zones on this segment
+    // Only count hits if we've met the minimum bounce requirement
     for (const target of targets) {
       if (hitTargetSet.has(target.id)) continue
       if (pointNearSegment(target.center, pos, nearest.point, target.radius)) {
-        hitTargetSet.add(target.id)
-        targetsHit.push(target.id)
+        if (bounceCount >= minBounces) {
+          hitTargetSet.add(target.id)
+          targetsHit.push(target.id)
+        }
+        // If bounceCount < minBounces, the ball passes through but doesn't count
       }
     }
 
@@ -222,6 +228,20 @@ export function computeBallPath(
     pos = add(hitPoint, scale(normalize(reflected), EPSILON))
     dir = normalize(reflected)
     bounceCount++
+
+    // Check targets on the final segment after last bounce too
+    if (bounceCount === maxBounces) {
+      const finalRayEnd = add(pos, scale(dir, MAX_PATH_LENGTH))
+      for (const target of targets) {
+        if (hitTargetSet.has(target.id)) continue
+        if (pointNearSegment(target.center, pos, finalRayEnd, target.radius)) {
+          if (bounceCount >= minBounces) {
+            hitTargetSet.add(target.id)
+            targetsHit.push(target.id)
+          }
+        }
+      }
+    }
   }
 
   return { points, bounces, targetsHit }

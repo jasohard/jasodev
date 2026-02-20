@@ -72,6 +72,8 @@ export interface LevelConfig {
   hint: string | null
   /** Maximum bounces before ball fades */
   maxBounces: number
+  /** Minimum bounces required before a target hit counts (0 = no requirement) */
+  minBounces: number
 }
 
 export type GamePhase = 'aiming' | 'animating' | 'complete' | 'failed' | 'levelSelect'

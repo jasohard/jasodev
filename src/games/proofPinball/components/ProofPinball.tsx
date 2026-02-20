@@ -123,7 +123,8 @@ export default function ProofPinball() {
           level.walls,
           reflectors,
           targets,
-          level.maxBounces
+          level.maxBounces,
+          level.minBounces
         )
         announcedTargetsRef.current = new Set()
         dispatch({ type: 'FIRE_SHOT', path })
@@ -322,14 +323,21 @@ export default function ProofPinball() {
           </span>
           <span className={styles.levelSubtitle}>{level.subtitle}</span>
         </div>
-        <div className={styles.shotInfo}>
-          <span className={styles.shotCount}>
-            {shotsTaken}/{level.maxShots}
-          </span>
-          <span className={styles.starDisplay}>
-            {'★'.repeat(Math.max(0, stars))}
-            {'☆'.repeat(3 - Math.max(0, stars))}
-          </span>
+        <div className={styles.headerRight}>
+          {level.minBounces > 0 && (
+            <span className={styles.bounceRequirement}>
+              {level.minBounces}+ bounces
+            </span>
+          )}
+          <div className={styles.shotInfo}>
+            <span className={styles.shotCount}>
+              {shotsTaken}/{level.maxShots}
+            </span>
+            <span className={styles.starDisplay}>
+              {'★'.repeat(Math.max(0, stars))}
+              {'☆'.repeat(3 - Math.max(0, stars))}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -463,72 +471,106 @@ export default function ProofPinball() {
           })}
 
           {/* Targets */}
-          {targets.map((target) => (
-            <g key={target.id}>
-              {/* Outer glow ring */}
-              {!target.hit && (
+          {targets.map((target) => {
+            // During animation, check if min bounces have been met
+            const isAnimating = phase === 'animating'
+            const bouncesReachedSoFar = visibleBounces.length
+            const isLocked = level.minBounces > 0 && isAnimating && bouncesReachedSoFar < level.minBounces && !target.hit
+            // In aiming phase, show targets as "locked-looking" if minBounces > 0
+            const showLockedStyle = level.minBounces > 0 && phase === 'aiming' && !target.hit
+
+            const targetColor = target.hit
+              ? '#4caf50'
+              : (isLocked || showLockedStyle)
+                ? '#666'
+                : '#ffd700'
+            const targetFill = target.hit
+              ? '#4caf50'
+              : (isLocked || showLockedStyle)
+                ? 'rgba(100, 100, 100, 0.15)'
+                : 'rgba(255, 215, 0, 0.15)'
+
+            return (
+              <g key={target.id}>
+                {/* Outer glow ring */}
+                {!target.hit && (
+                  <circle
+                    cx={target.center.x}
+                    cy={target.center.y}
+                    r={target.radius + 4}
+                    fill="none"
+                    stroke={targetColor}
+                    strokeWidth="2"
+                    strokeDasharray="4 4"
+                    opacity="0.5"
+                    filter={(!isLocked && !showLockedStyle) ? `url(#${TARGET_GLOW_ID})` : undefined}
+                  >
+                    <animateTransform
+                      attributeName="transform"
+                      type="rotate"
+                      from={`0 ${target.center.x} ${target.center.y}`}
+                      to={`360 ${target.center.x} ${target.center.y}`}
+                      dur="8s"
+                      repeatCount="indefinite"
+                    />
+                  </circle>
+                )}
+                {/* Main target */}
                 <circle
                   cx={target.center.x}
                   cy={target.center.y}
-                  r={target.radius + 4}
-                  fill="none"
-                  stroke="#ffd700"
+                  r={target.radius}
+                  fill={targetFill}
+                  stroke={targetColor}
                   strokeWidth="2"
-                  strokeDasharray="4 4"
-                  opacity="0.5"
-                  filter={`url(#${TARGET_GLOW_ID})`}
-                >
-                  <animateTransform
-                    attributeName="transform"
-                    type="rotate"
-                    from={`0 ${target.center.x} ${target.center.y}`}
-                    to={`360 ${target.center.x} ${target.center.y}`}
-                    dur="8s"
-                    repeatCount="indefinite"
-                  />
-                </circle>
-              )}
-              {/* Main target */}
-              <circle
-                cx={target.center.x}
-                cy={target.center.y}
-                r={target.radius}
-                fill={target.hit ? '#4caf50' : 'rgba(255, 215, 0, 0.15)'}
-                stroke={target.hit ? '#4caf50' : '#ffd700'}
-                strokeWidth="2"
-              />
-              {/* Inner ring */}
-              <circle
-                cx={target.center.x}
-                cy={target.center.y}
-                r={target.radius * 0.5}
-                fill="none"
-                stroke={target.hit ? '#81c784' : '#ffd700'}
-                strokeWidth="1"
-                opacity="0.6"
-              />
-              {/* Center dot */}
-              <circle
-                cx={target.center.x}
-                cy={target.center.y}
-                r={3}
-                fill={target.hit ? '#81c784' : '#ffd700'}
-              />
-              {/* Hit check mark */}
-              {target.hit && (
-                <text
-                  x={target.center.x}
-                  y={target.center.y + 5}
-                  textAnchor="middle"
-                  fontSize="18"
-                  fill="#fff"
-                  fontWeight="bold"
-                >
-                  ✓
-                </text>
-              )}
-            </g>
-          ))}
+                />
+                {/* Inner ring */}
+                <circle
+                  cx={target.center.x}
+                  cy={target.center.y}
+                  r={target.radius * 0.5}
+                  fill="none"
+                  stroke={target.hit ? '#81c784' : targetColor}
+                  strokeWidth="1"
+                  opacity="0.6"
+                />
+                {/* Center dot */}
+                <circle
+                  cx={target.center.x}
+                  cy={target.center.y}
+                  r={3}
+                  fill={target.hit ? '#81c784' : targetColor}
+                />
+                {/* Lock icon when minBounces not met */}
+                {(isLocked || showLockedStyle) && !target.hit && (
+                  <text
+                    x={target.center.x}
+                    y={target.center.y + 5}
+                    textAnchor="middle"
+                    fontSize="14"
+                    fill="#888"
+                    opacity="0.8"
+                    pointerEvents="none"
+                  >
+                    🔒
+                  </text>
+                )}
+                {/* Hit check mark */}
+                {target.hit && (
+                  <text
+                    x={target.center.x}
+                    y={target.center.y + 5}
+                    textAnchor="middle"
+                    fontSize="18"
+                    fill="#fff"
+                    fontWeight="bold"
+                  >
+                    ✓
+                  </text>
+                )}
+              </g>
+            )
+          })}
 
           {/* Completed trail (from previous shot) */}
           {completedTrailD && (
@@ -691,16 +733,48 @@ export default function ProofPinball() {
           {/* Bounce counter during animation */}
           {phase === 'animating' && (
             <g>
-              <rect x={VIEWBOX_W - 75} y={8} width={65} height={24} rx={6} fill="rgba(0,0,0,0.5)" />
+              {(() => {
+                const bouncesMet = visibleBounces.length >= level.minBounces
+                const counterColor = level.minBounces > 0
+                  ? (bouncesMet ? '#4caf50' : '#ff6b6b')
+                  : '#80deea'
+                const bgColor = level.minBounces > 0
+                  ? (bouncesMet ? 'rgba(76,175,80,0.25)' : 'rgba(255,107,107,0.25)')
+                  : 'rgba(0,0,0,0.5)'
+                return (
+                  <>
+                    <rect x={VIEWBOX_W - 90} y={8} width={80} height={24} rx={6} fill={bgColor} stroke={counterColor} strokeWidth="1" strokeOpacity="0.5" />
+                    <text
+                      x={VIEWBOX_W - 50}
+                      y={24}
+                      textAnchor="middle"
+                      fontSize="11"
+                      fontFamily="monospace"
+                      fill={counterColor}
+                      fontWeight={bouncesMet ? '700' : '400'}
+                    >
+                      {visibleBounces.length}/{level.minBounces > 0 ? level.minBounces : '∞'} bounces
+                    </text>
+                  </>
+                )
+              })()}
+            </g>
+          )}
+
+          {/* Min bounces requirement badge (shown when aiming) */}
+          {phase === 'aiming' && level.minBounces > 0 && (
+            <g>
+              <rect x={VIEWBOX_W - 120} y={8} width={110} height={26} rx={6} fill="rgba(255,107,107,0.15)" stroke="rgba(255,107,107,0.4)" strokeWidth="1" />
               <text
-                x={VIEWBOX_W - 42}
-                y={24}
+                x={VIEWBOX_W - 65}
+                y={25}
                 textAnchor="middle"
                 fontSize="11"
                 fontFamily="monospace"
-                fill="#80deea"
+                fill="#ff6b6b"
+                fontWeight="600"
               >
-                {visibleBounces.length} {visibleBounces.length === 1 ? 'bounce' : 'bounces'}
+                🔒 {level.minBounces}+ bounces
               </text>
             </g>
           )}
