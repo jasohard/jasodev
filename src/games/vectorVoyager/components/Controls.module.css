@@ -1,0 +1,117 @@
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0;
+  width: 100%;
+  max-width: 480px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+}
+
+/* ─── Result banner ──────────────────── */
+
+.resultBanner {
+  text-align: center;
+  padding: var(--space-xs) 0;
+}
+
+.successText {
+  color: #4caf50;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.failText {
+  color: #f44336;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+/* ─── Launch button ──────────────────── */
+
+.launchBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: 12px 28px;
+  background: linear-gradient(135deg, #7c5cbf 0%, #6c4caf 100%);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  min-height: 50px;
+  min-width: 140px;
+  transition: transform var(--transition-fast), opacity var(--transition-fast),
+    box-shadow var(--transition-fast);
+  box-shadow: 0 4px 16px rgba(124, 92, 191, 0.35);
+}
+
+.launchBtn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.launchBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.launchBtn.overBudget {
+  background: linear-gradient(135deg, #a33 0%, #822 100%);
+  box-shadow: 0 4px 16px rgba(170, 50, 50, 0.3);
+}
+
+@media (hover: hover) {
+  .launchBtn:hover:not(:disabled) {
+    box-shadow: 0 6px 20px rgba(124, 92, 191, 0.5);
+    transform: translateY(-1px);
+  }
+}
+
+.rocket {
+  font-size: 1.2rem;
+}
+
+/* ─── Secondary buttons ──────────────── */
+
+.secondaryBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 8px 14px;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  border-radius: 10px;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  min-height: 44px;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.secondaryBtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.secondaryBtn:active:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+@media (hover: hover) {
+  .secondaryBtn:hover:not(:disabled) {
+    border-color: var(--color-accent-hover);
+    color: var(--color-text);
+  }
+}

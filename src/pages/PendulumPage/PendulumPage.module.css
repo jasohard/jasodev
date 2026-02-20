@@ -1,0 +1,63 @@
+/* Mobile-first pendulum page */
+
+.page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Canvas wrapper - takes available space */
+.canvasWrapper {
+  flex: 1;
+  position: relative;
+  min-height: 300px;
+  background: #0a0a0a;
+}
+
+.iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* Info section below the canvas */
+.info {
+  padding: var(--space-md);
+}
+
+.title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: var(--space-sm);
+}
+
+.description {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  max-width: 60ch;
+}
+
+/* Tablet+ */
+@media (min-width: 768px) {
+  .canvasWrapper {
+    min-height: 500px;
+  }
+
+  .info {
+    padding: var(--space-lg) var(--space-xl);
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .title {
+    font-size: 1.5rem;
+  }
+
+  .description {
+    font-size: 0.95rem;
+  }
+}

@@ -1,0 +1,75 @@
+/* Mobile-first game card */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  overflow: hidden;
+  color: var(--color-text);
+  transition: border-color var(--transition-base), transform var(--transition-base);
+  min-height: var(--tap-target-min);
+}
+
+.card:active {
+  transform: scale(0.98);
+  border-color: var(--color-accent);
+}
+
+/* Thumbnail area */
+.thumbnail {
+  aspect-ratio: 16 / 10;
+  background: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: var(--space-md);
+}
+
+.thumbnail svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Card info */
+.info {
+  padding: var(--space-md);
+}
+
+.title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: var(--space-xs);
+  line-height: 1.3;
+}
+
+.description {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+/* Desktop hover states - only on devices that support hover */
+@media (hover: hover) {
+  .card:hover {
+    border-color: var(--color-accent);
+    transform: translateY(-2px);
+  }
+}
+
+/* Larger screens: slightly larger text */
+@media (min-width: 768px) {
+  .title {
+    font-size: 1.1rem;
+  }
+
+  .description {
+    font-size: 0.9rem;
+  }
+
+  .info {
+    padding: var(--space-md) var(--space-lg);
+  }
+}
