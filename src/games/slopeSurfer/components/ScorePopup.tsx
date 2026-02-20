@@ -1,8 +1,9 @@
 /**
  * ScorePopup — Animated score text that pops up and fades when gems are collected.
+ * Uses SVG animate elements for performance (no React state updates).
  */
 
-import { memo, useState, useEffect, useCallback } from 'react'
+import { memo } from 'react'
 
 interface ScorePopupItem {
   id: number
@@ -20,53 +21,43 @@ function ScorePopupComponent({ items }: ScorePopupProps) {
   return (
     <g style={{ pointerEvents: 'none' }}>
       {items.map(item => (
-        <PopupText key={item.id} item={item} />
+        <text
+          key={item.id}
+          x={item.x}
+          y={item.y}
+          textAnchor="middle"
+          fill={item.color}
+          fontSize={13}
+          fontWeight="bold"
+          fontFamily="var(--font-mono, monospace)"
+        >
+          {item.text}
+          {/* Rise up animation */}
+          <animate
+            attributeName="y"
+            from={item.y}
+            to={item.y - 30}
+            dur="0.8s"
+            fill="freeze"
+          />
+          {/* Fade out */}
+          <animate
+            attributeName="opacity"
+            from="1"
+            to="0"
+            dur="0.8s"
+            fill="freeze"
+          />
+          {/* Scale up then shrink */}
+          <animate
+            attributeName="font-size"
+            values="13;16;12"
+            dur="0.4s"
+            fill="freeze"
+          />
+        </text>
       ))}
     </g>
-  )
-}
-
-function PopupText({ item }: { item: ScorePopupItem }) {
-  const [offset, setOffset] = useState(0)
-  const [opacity, setOpacity] = useState(1)
-
-  const animate = useCallback(() => {
-    let start: number | null = null
-    const duration = 800
-
-    const step = (timestamp: number) => {
-      if (start === null) start = timestamp
-      const elapsed = timestamp - start
-      const progress = Math.min(elapsed / duration, 1)
-
-      setOffset(-30 * progress)
-      setOpacity(1 - progress * progress)
-
-      if (progress < 1) {
-        requestAnimationFrame(step)
-      }
-    }
-
-    requestAnimationFrame(step)
-  }, [])
-
-  useEffect(() => {
-    animate()
-  }, [animate])
-
-  return (
-    <text
-      x={item.x}
-      y={item.y + offset}
-      textAnchor="middle"
-      fill={item.color}
-      fontSize={12}
-      fontWeight="bold"
-      fontFamily="var(--font-mono, monospace)"
-      opacity={opacity}
-    >
-      {item.text}
-    </text>
   )
 }
 

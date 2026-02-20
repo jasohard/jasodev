@@ -46,6 +46,7 @@ import Controls from './components/Controls'
 import LevelSelect from './components/LevelSelect'
 import LevelComplete from './components/LevelComplete'
 import ScorePopup from './components/ScorePopup'
+import StartEndMarkers from './components/StartEndMarkers'
 import type { ScorePopupItem } from './components/ScorePopup'
 
 import styles from './SlopeSurfer.module.css'
@@ -205,9 +206,17 @@ export default function SlopeSurfer() {
     // Update particles
     anim.particles = updateParticles(anim.particles, dt)
 
-    // Board flash decay
-    if (anim.boardFlash) {
-      // Will be cleared by timeout
+    // Safety timeout: fail after 60 seconds of riding (shouldn't happen normally)
+    if (anim.rideTime > 60) {
+      anim.phase = 'done'
+      syncToReact(anim)
+      dispatch({
+        type: 'LAND_FAILED',
+        rideScore: anim.score,
+        rideGems: anim.gemsCollected,
+        rideTime: anim.rideTime,
+      })
+      return
     }
 
     // Check if surfer has reached the target zone or gone past the end
@@ -524,6 +533,13 @@ export default function SlopeSurfer() {
               xStart={level.startPoint.x}
               xEnd={level.endPoint.x}
               showSpeedOverlay={state.showSpeedOverlay}
+            />
+
+            {/* Start/end markers */}
+            <StartEndMarkers
+              startPoint={level.startPoint}
+              endPoint={level.endPoint}
+              curveFunc={curveFunc}
             />
 
             {/* Gems */}
