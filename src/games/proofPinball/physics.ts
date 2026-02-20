@@ -229,19 +229,6 @@ export function computeBallPath(
     dir = normalize(reflected)
     bounceCount++
 
-    // Check targets on the final segment after last bounce too
-    if (bounceCount === maxBounces) {
-      const finalRayEnd = add(pos, scale(dir, MAX_PATH_LENGTH))
-      for (const target of targets) {
-        if (hitTargetSet.has(target.id)) continue
-        if (pointNearSegment(target.center, pos, finalRayEnd, target.radius)) {
-          if (bounceCount >= minBounces) {
-            hitTargetSet.add(target.id)
-            targetsHit.push(target.id)
-          }
-        }
-      }
-    }
   }
 
   return { points, bounces, targetsHit }

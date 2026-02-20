@@ -256,7 +256,7 @@ export const LEVELS: LevelConfig[] = [
       { id: 'ref1', center: { x: 310, y: 170 }, angle: -45, halfLength: 35 },
     ],
     launchPoint: { x: 80, y: 160 },
-    maxShots: 4,
+    maxShots: 6,
     parShots: 1,
     predictionBounces: 1,
     hint: 'The target is locked in the vault. Use the reflector and plan a multi-bounce path through the gaps!',

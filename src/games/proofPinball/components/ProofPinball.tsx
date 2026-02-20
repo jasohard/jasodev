@@ -741,6 +741,9 @@ export default function ProofPinball() {
                 const bgColor = level.minBounces > 0
                   ? (bouncesMet ? 'rgba(76,175,80,0.25)' : 'rgba(255,107,107,0.25)')
                   : 'rgba(0,0,0,0.5)'
+                const label = level.minBounces > 0
+                  ? `${visibleBounces.length}/${level.minBounces} bounces`
+                  : `${visibleBounces.length} ${visibleBounces.length === 1 ? 'bounce' : 'bounces'}`
                 return (
                   <>
                     <rect x={VIEWBOX_W - 90} y={8} width={80} height={24} rx={6} fill={bgColor} stroke={counterColor} strokeWidth="1" strokeOpacity="0.5" />
@@ -753,7 +756,7 @@ export default function ProofPinball() {
                       fill={counterColor}
                       fontWeight={bouncesMet ? '700' : '400'}
                     >
-                      {visibleBounces.length}/{level.minBounces > 0 ? level.minBounces : '∞'} bounces
+                      {label}
                     </text>
                   </>
                 )
