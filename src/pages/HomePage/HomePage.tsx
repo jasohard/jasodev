@@ -4,6 +4,7 @@ import PlinkoThumbnail from '../../components/thumbnails/PlinkoThumbnail.tsx'
 import PinballThumbnail from '../../components/thumbnails/PinballThumbnail.tsx'
 import VectorThumbnail from '../../components/thumbnails/VectorThumbnail.tsx'
 import TrigThumbnail from '../../components/thumbnails/TrigThumbnail.tsx'
+import SlopeSurferThumbnail from '../../components/thumbnails/SlopeSurferThumbnail.tsx'
 import styles from './HomePage.module.css'
 
 export default function HomePage() {
@@ -17,6 +18,12 @@ export default function HomePage() {
       </section>
 
       <section className={styles.grid} aria-label="Available games">
+        <GameCard
+          to="/slope-surfer"
+          title="Slope Surfer"
+          description="Ride a curve where your board IS the tangent line and your speed IS |f'(x)|. Shape the terrain, collect gems, and feel what derivatives really mean."
+          thumbnail={<SlopeSurferThumbnail />}
+        />
         <GameCard
           to="/plinko"
           title="Probability Plinko"
