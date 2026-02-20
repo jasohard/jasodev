@@ -1,82 +1,70 @@
-/** Types for Probability Plinko game */
+/** Types for the reworked Physics Plinko game */
 
-export interface Peg {
-  /** Row index (0-based from top) */
-  row: number
-  /** Column index within the row */
-  col: number
-  /** Probability of going LEFT (0-1). Right = 1 - leftProb */
-  leftProb: number
-  /** Whether this peg's probability can be adjusted */
-  locked: boolean
-}
-
-export interface PegPosition {
+export interface Vec2 {
   x: number
   y: number
 }
 
-export interface BallPath {
-  /** Sequence of (x, y) positions the ball visits, from drop to bin */
-  points: { x: number; y: number }[]
-  /** Which bin the ball lands in (0-based) */
-  binIndex: number
+/** A peg on the board */
+export interface Peg {
+  /** Unique identifier */
+  id: string
+  /** Position in board coordinates */
+  x: number
+  y: number
+  /** Radius of the peg */
+  radius: number
+  /** Peg type */
+  type: 'fixed' | 'moveable' | 'bumper'
+  /** Starting position (for reset) */
+  startX: number
+  startY: number
 }
 
+/** A ball being simulated */
+export interface Ball {
+  id: number
+  x: number
+  y: number
+  vx: number
+  vy: number
+  radius: number
+  /** Whether this ball is still active (hasn't landed in a bin) */
+  active: boolean
+  /** Which bin the ball landed in (-1 if still active) */
+  binIndex: number
+  /** Time alive in seconds (for timeout) */
+  age: number
+}
+
+/** Level configuration */
 export interface LevelConfig {
   id: number
   name: string
   subtitle: string
-  /** Number of peg rows */
-  rows: number
-  /** Target distribution (normalized probabilities for each bin) */
+  /** Fixed pegs that can't be moved */
+  fixedPegs: Array<{ x: number; y: number; radius?: number }>
+  /** Moveable pegs the player can drag */
+  moveablePegs: Array<{ x: number; y: number; radius?: number }>
+  /** Bumper pegs (larger, bouncier) */
+  bumperPegs?: Array<{ x: number; y: number; radius?: number }>
+  /** Number of bins at the bottom */
+  binCount: number
+  /** Target distribution (normalized, sums to 1) */
   targetDistribution: number[]
-  /** Minimum match % to earn 1 star */
-  star1Threshold: number
-  /** Minimum match % to earn 2 stars */
-  star2Threshold: number
-  /** Minimum match % to earn 3 stars */
-  star3Threshold: number
-  /** If true, all pegs are locked (tutorial) */
-  allLocked: boolean
-  /** Initial left-probability for all pegs (default 0.5) */
-  initialProb: number
-  /** Whether this is the tutorial level (auto-win) */
-  isTutorial: boolean
-  /** Hint text shown at level start */
+  /** Minimum balls required for scoring */
+  minBallsForScore: number
+  /** Star thresholds (match %) */
+  star1: number
+  star2: number
+  star3: number
+  /** Hint text */
   hint: string
+  /** Whether this is free play (no target) */
+  freePlay?: boolean
+  /** Drop x position (default: center) */
+  dropX?: number
 }
 
-export interface GameState {
-  /** Current level config */
-  level: LevelConfig
-  /** 2D array of pegs [row][col] */
-  pegs: Peg[][]
-  /** Histogram bin counts */
-  bins: number[]
-  /** Total balls dropped so far */
-  totalBalls: number
-  /** Currently selected peg (for adjustment), or null */
-  selectedPeg: { row: number; col: number } | null
-  /** Current match percentage (0-100) */
-  matchPercent: number
-  /** Stars earned (0-3) */
-  stars: number
-  /** Balls currently animating */
-  activeBalls: ActiveBall[]
-  /** Animation speed multiplier */
-  speed: 1 | 3 | 10
-  /** How many balls to drop at once */
-  dropCount: 1 | 10 | 50
-  /** Whether the game is currently dropping balls */
-  isDropping: boolean
-}
-
-export interface ActiveBall {
-  id: number
-  path: BallPath
-  /** Current animation progress (0 = start, 1 = in bin) */
-  progress: number
-  /** Color hue for this ball */
-  hue: number
-}
+export type SpeedMultiplier = 1 | 3 | 10
+export type DropCount = 10 | 50 | 100

@@ -19,8 +19,8 @@ export default function HomePage() {
       <section className={styles.grid} aria-label="Available games">
         <GameCard
           to="/plinko"
-          title="Probability Plinko"
-          description="Hack a Plinko board by tweaking peg odds to match target distributions. Watch hundreds of balls prove you right — or wrong."
+          title="Plinko"
+          description="Drag pegs to reshape a Plinko board and watch balls bounce with real physics. Match target distributions by sculpting the ball flow."
           thumbnail={<PlinkoThumbnail />}
         />
         <GameCard

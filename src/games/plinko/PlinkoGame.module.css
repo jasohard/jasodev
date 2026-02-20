@@ -1,4 +1,4 @@
-/* Plinko game page layout — mobile-first */
+/* Physics Plinko — mobile-first styles */
 
 .page {
   display: flex;
@@ -8,21 +8,21 @@
   max-width: 520px;
   margin: 0 auto;
   padding: var(--space-sm) var(--space-md) var(--space-xl);
-  gap: var(--space-sm);
+  gap: var(--space-xs);
 }
 
 /* ─── Header ───────────────────────────── */
 
 .header {
   text-align: center;
-  padding: var(--space-xs) 0;
+  padding: var(--space-xs) 0 0;
 }
 
 .title {
   font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  background: linear-gradient(135deg, #7c5cbf, #00d2d3);
+  background: linear-gradient(135deg, #00bcd4, #7c5cbf);
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -41,6 +41,20 @@
   margin-top: 2px;
 }
 
+/* ─── Hint ─────────────────────────────── */
+
+.hint {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: var(--space-xs) var(--space-md);
+  background: rgba(0, 188, 212, 0.08);
+  border: 1px solid rgba(0, 188, 212, 0.15);
+  border-radius: 8px;
+  line-height: 1.4;
+  width: 100%;
+}
+
 /* ─── Board ────────────────────────────── */
 
 .boardWrapper {
@@ -49,16 +63,313 @@
   justify-content: center;
 }
 
-/* ─── Responsive tweaks ────────────────── */
+.board {
+  width: 100%;
+  max-width: 400px;
+  height: auto;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* ─── Match bar ────────────────────────── */
+
+.matchBar {
+  width: 100%;
+  padding: 0 var(--space-xs);
+}
+
+.matchInfo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.matchLabel {
+  font-size: 0.8rem;
+  color: var(--color-text);
+}
+
+.matchNote {
+  font-size: 0.65rem;
+  color: var(--color-text-muted);
+}
+
+.matchTrack {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  overflow: visible;
+}
+
+.matchFill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.matchThreshold {
+  position: absolute;
+  top: -2px;
+  width: 1px;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* ─── Stars ────────────────────────────── */
+
+.stars {
+  display: flex;
+  gap: 2px;
+  font-size: 1rem;
+}
+
+.starFilled {
+  color: #ffd32a;
+}
+
+.starEmpty {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+/* ─── Controls ─────────────────────────── */
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  width: 100%;
+  max-width: 480px;
+}
+
+.controlRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+}
+
+.dropBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: 12px 28px;
+  background: linear-gradient(135deg, #00bcd4 0%, #0097a7 100%);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  min-height: 48px;
+  min-width: 120px;
+  transition: transform var(--transition-fast), opacity var(--transition-fast),
+    box-shadow var(--transition-fast);
+  box-shadow: 0 4px 16px rgba(0, 188, 212, 0.35);
+}
+
+.dropBtn:active {
+  transform: scale(0.95);
+}
+
+.dropBtn.dropping {
+  box-shadow: 0 2px 10px rgba(0, 188, 212, 0.5);
+  animation: dropPulse 0.8s ease infinite;
+}
+
+@keyframes dropPulse {
+  0%, 100% { box-shadow: 0 4px 16px rgba(0, 188, 212, 0.35); }
+  50% { box-shadow: 0 4px 24px rgba(0, 188, 212, 0.6); }
+}
+
+@media (hover: hover) {
+  .dropBtn:hover:not(:disabled) {
+    box-shadow: 0 6px 20px rgba(0, 188, 212, 0.5);
+    transform: translateY(-1px);
+  }
+}
+
+.toggleBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 12px;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  border-radius: 10px;
+  cursor: pointer;
+  min-height: 48px;
+  min-width: 52px;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.toggleBtn:active {
+  background: var(--color-surface-hover);
+  border-color: #00bcd4;
+}
+
+@media (hover: hover) {
+  .toggleBtn:hover {
+    border-color: #00bcd4;
+  }
+}
+
+.toggleLabel {
+  font-size: 0.6rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.toggleValue {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+}
+
+.secondaryBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  min-height: 36px;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.secondaryBtn:active {
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+
+@media (hover: hover) {
+  .secondaryBtn:hover {
+    color: var(--color-text);
+    border-color: var(--color-text-muted);
+  }
+}
+
+.ballCount {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+/* ─── Level select ─────────────────────── */
+
+.levelToggle {
+  padding: 8px 20px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  min-height: 36px;
+  transition: border-color var(--transition-fast);
+}
+
+.levelToggle:active {
+  border-color: #00bcd4;
+}
+
+@media (hover: hover) {
+  .levelToggle:hover {
+    border-color: #00bcd4;
+  }
+}
+
+.levelGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-sm) 0;
+}
+
+.levelBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-sm) var(--space-xs);
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast),
+    transform var(--transition-fast);
+  min-height: 64px;
+  min-width: 44px;
+}
+
+.levelBtn:active {
+  transform: scale(0.95);
+}
+
+.levelBtnActive {
+  border-color: #00bcd4;
+  background: var(--color-surface-hover);
+}
+
+@media (hover: hover) {
+  .levelBtn:hover {
+    border-color: #00bcd4;
+    background: var(--color-surface-hover);
+  }
+}
+
+.levelNum {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.levelName {
+  font-size: 0.55rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.levelStars {
+  display: flex;
+  gap: 1px;
+  font-size: 0.7rem;
+}
+
+/* ─── Responsive ───────────────────────── */
 
 @media (min-width: 480px) {
   .page {
     padding: var(--space-md) var(--space-lg) var(--space-2xl);
-    gap: var(--space-md);
+    gap: var(--space-sm);
   }
 
   .title {
     font-size: 1.5rem;
+  }
+
+  .levelGrid {
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
@@ -69,5 +380,9 @@
 
   .title {
     font-size: 1.75rem;
+  }
+
+  .levelGrid {
+    grid-template-columns: repeat(8, 1fr);
   }
 }
