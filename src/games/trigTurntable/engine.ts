@@ -84,10 +84,12 @@ export function computeMatchScore(
   const playerSamples = sampleWave(playerCircles, numSamples, period)
   const targetSamples = sampleWave(targetCircles, numSamples, period)
 
-  // Compute max amplitude for normalization
-  let maxAmp = 0
-  for (const c of targetCircles) maxAmp += Math.abs(c.amplitude)
-  if (maxAmp === 0) maxAmp = 1
+  // Compute max amplitude for normalization (use whichever is larger)
+  let targetAmp = 0
+  let playerAmp = 0
+  for (const c of targetCircles) targetAmp += Math.abs(c.amplitude)
+  for (const c of playerCircles) playerAmp += Math.abs(c.amplitude)
+  const maxAmp = Math.max(targetAmp, playerAmp, 0.1) // Guard against zero
 
   // Compute RMSE
   let sumSquaredError = 0

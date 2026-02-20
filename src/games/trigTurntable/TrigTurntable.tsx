@@ -54,9 +54,11 @@ export default function TrigTurntable() {
 
   const selectedCircle = circles[selectedCircleIndex]
 
-  // Keep refs in sync with state
-  timeRef.current = time
-  speedRef.current = speed
+  // Keep refs in sync with state (post-render effect to avoid side effects during render)
+  useEffect(() => {
+    timeRef.current = time
+    speedRef.current = speed
+  }, [time, speed])
 
   // ── Animation loop ──────────────────────────────
   useEffect(() => {
@@ -65,7 +67,7 @@ export default function TrigTurntable() {
     lastTimeRef.current = performance.now()
 
     const animate = (now: number) => {
-      const dt = (now - lastTimeRef.current) / 1000
+      const dt = Math.min((now - lastTimeRef.current) / 1000, 0.1) // Cap dt to avoid jumps
       lastTimeRef.current = now
       const newTime = timeRef.current + dt * speedRef.current * 2 // Base speed: 2 rad/s
       dispatch({ type: 'UPDATE_TIME', time: newTime })
@@ -750,7 +752,7 @@ function EpicycleTrail({
 
     for (let i = 0; i < numTrailPoints; i++) {
       const frac = i / (numTrailPoints - 1)
-      const t = time - trailDuration * (1 - frac)
+      const t = Math.max(0, time - trailDuration * (1 - frac))
       const tip = computeEpicycleTip(circles, t, cx, cy)
       pts.push(`${tip.x.toFixed(1)},${tip.y.toFixed(1)}`)
     }
