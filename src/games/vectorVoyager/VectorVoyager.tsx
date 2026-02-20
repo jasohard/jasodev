@@ -7,7 +7,6 @@ import {
   vecSub,
   vecLen,
   vecAdd,
-  vecScale,
   vecNormalize,
   totalFuelUsed,
   checkCollisions,
@@ -35,24 +34,19 @@ export default function VectorVoyager() {
   const [trail, setTrail] = useState<TrailParticle[]>([])
   const [explosionParticles, setExplosionParticles] = useState<Vec2[]>([])
   const [victoryParticles, setVictoryParticles] = useState<Vec2[]>([])
+  const [draggingIdx, setDraggingIdx] = useState(-1)
 
-  // Drag state tracked via refs to avoid stale closures
+  // Drag state tracked via refs (for pointerMove handler perf)
   const isDragging = useRef(false)
   const dragMode = useRef<'new' | 'adjust'>('new')
-  const dragVectorIdx = useRef(-1)
+  const dragVectorIdxRef = useRef(-1)
   const svgRef = useRef<SVGSVGElement | null>(null)
 
   const animFrameRef = useRef(0)
-  const launchStateRef = useRef({
-    segmentIdx: 0,
-    segmentProgress: 0,
-    collisionResult: null as ReturnType<typeof checkCollisions> | null,
-  })
 
   // Derived state
   const fuelUsed = totalFuelUsed(vectors)
   const overBudget = level.fuelBudget > 0 && fuelUsed > level.fuelBudget
-  const pathReaches = vectors.length > 0 && reachesTarget(vectors, level.target, level.targetRadius)
   const collision = vectors.length > 0 ? checkCollisions(vectors, level.asteroids) : { hit: false as const }
   const canLaunch = vectors.length > 0 && !collision.hit
 
@@ -75,14 +69,16 @@ export default function VectorVoyager() {
   // Set page title
   useEffect(() => {
     document.title = `Vector Voyager - ${level.name} | jasodev`
-    return () => { document.title = 'jasodev' }
+    return () => {
+      document.title = 'jasodev'
+    }
   }, [level.name])
 
   // ─── Pointer → SVG coordinate conversion ─────────────────────
 
   const pointerToSVG = useCallback((e: React.PointerEvent): Vec2 => {
-    const svg = (e.currentTarget as SVGSVGElement) ?? svgRef.current
-    if (!svg) return { x: 0, y: 0 }
+    const svg = svgRef.current ?? (e.currentTarget as SVGSVGElement)
+    if (!svg || !svg.getScreenCTM) return { x: 0, y: 0 }
     const ctm = svg.getScreenCTM()
     if (!ctm) return { x: 0, y: 0 }
     const inv = ctm.inverse()
@@ -106,28 +102,32 @@ export default function VectorVoyager() {
   const handleDragStart = useCallback(
     (e: React.PointerEvent) => {
       if (phase !== 'planning') return
-      const pt = pointerToSVG(e)
-      ;(e.target as Element).setPointerCapture?.(e.pointerId)
-      svgRef.current = e.currentTarget as SVGSVGElement
+      // Save SVG ref from the event's closest SVG
+      const targetEl = e.target as Element
+      const svg = targetEl.closest('svg') as SVGSVGElement | null
+      if (svg) svgRef.current = svg
+      targetEl.setPointerCapture?.(e.pointerId)
 
-      // Check if tapping near an existing arrowhead to adjust
-      const handleAttr = (e.target as Element).getAttribute?.('data-vector-handle')
+      const pt = pointerToSVG(e)
+
+      // Check if tapping on an existing arrowhead handle
+      const handleAttr = targetEl.getAttribute?.('data-vector-handle')
       if (handleAttr !== null && handleAttr !== undefined) {
         const idx = parseInt(handleAttr, 10)
         if (!isNaN(idx) && idx >= 0 && idx < vectors.length) {
           isDragging.current = true
           dragMode.current = 'adjust'
-          dragVectorIdx.current = idx
+          dragVectorIdxRef.current = idx
+          setDraggingIdx(idx)
           return
         }
       }
 
       // Otherwise, create a new vector from the chain endpoint
-      const startPt = vectors.length > 0 ? vectors[vectors.length - 1].end : level.shipStart
-      // Only start a new vector if tapping near the chain endpoint (within ~40px)
+      const startPt =
+        vectors.length > 0 ? vectors[vectors.length - 1].end : level.shipStart
       const dist = vecLen(vecSub(pt, startPt))
-      if (dist > 60 && vectors.length > 0) return // too far from endpoint
-      if (vectors.length === 0 && vecLen(vecSub(pt, level.shipStart)) > 60) return
+      if (dist > 60) return // too far from endpoint — ignore
 
       const newVec: GameVector = {
         id: vectorIdCounter++,
@@ -137,7 +137,8 @@ export default function VectorVoyager() {
       setVectors((prev) => [...prev, newVec])
       isDragging.current = true
       dragMode.current = 'new'
-      dragVectorIdx.current = -1 // will be last
+      dragVectorIdxRef.current = -1
+      setDraggingIdx(-1)
     },
     [phase, vectors, level.shipStart, pointerToSVG, clamp]
   )
@@ -148,7 +149,6 @@ export default function VectorVoyager() {
       const pt = clamp(pointerToSVG(e))
 
       if (dragMode.current === 'new') {
-        // Update the last vector's endpoint
         setVectors((prev) => {
           const next = [...prev]
           const last = next[next.length - 1]
@@ -158,17 +158,18 @@ export default function VectorVoyager() {
           return next
         })
       } else if (dragMode.current === 'adjust') {
-        const idx = dragVectorIdx.current
+        const idx = dragVectorIdxRef.current
         setVectors((prev) => {
           const next = [...prev]
           if (next[idx]) {
             next[idx] = { ...next[idx], end: pt }
-            // Update start points of subsequent vectors in the chain
+            // Cascade: update start points of subsequent vectors in chain
             for (let i = idx + 1; i < next.length; i++) {
+              const delta = vecSub(prev[i].end, prev[i].start)
               next[i] = {
                 ...next[i],
                 start: next[i - 1].end,
-                end: vecAdd(next[i - 1].end, vecSub(prev[i].end, prev[i].start)),
+                end: vecAdd(next[i - 1].end, delta),
               }
             }
           }
@@ -182,6 +183,7 @@ export default function VectorVoyager() {
   const handleDragEnd = useCallback(() => {
     if (!isDragging.current) return
     isDragging.current = false
+    setDraggingIdx(-1)
 
     // Remove vectors that are too tiny (accidental taps)
     setVectors((prev) => {
@@ -198,13 +200,7 @@ export default function VectorVoyager() {
   const handleLaunch = useCallback(() => {
     if (vectors.length === 0 || overBudget) return
 
-    // Pre-check collisions to know where to stop
     const col = checkCollisions(vectors, level.asteroids)
-    launchStateRef.current = {
-      segmentIdx: 0,
-      segmentProgress: 0,
-      collisionResult: col,
-    }
 
     setPhase('launching')
     setTrail([])
@@ -212,46 +208,55 @@ export default function VectorVoyager() {
     setVictoryParticles([])
 
     const startTime = performance.now()
-    const SPEED = 200 // pixels per second
+    const SPEED = 180 // pixels per second
 
     // Compute segment durations
-    const segDurations = vectors.map((v) => vecLen(vecSub(v.end, v.start)) / SPEED)
+    const segDurations = vectors.map((v) =>
+      vecLen(vecSub(v.end, v.start)) / SPEED
+    )
 
-    // If there's a collision, truncate the last segment
+    // If there's a collision, truncate the colliding segment
     let totalDur = segDurations.reduce((a, b) => a + b, 0)
     if (col.hit) {
-      // Truncate the colliding segment
-      const colSegDur = segDurations[col.vectorIdx]
-      segDurations[col.vectorIdx] = colSegDur * col.t
-      totalDur = segDurations.slice(0, col.vectorIdx + 1).reduce((a, b) => a + b, 0)
+      const origDur = segDurations[col.vectorIdx]
+      segDurations[col.vectorIdx] = origDur * col.t
+      totalDur = segDurations
+        .slice(0, col.vectorIdx + 1)
+        .reduce((a, b) => a + b, 0)
     }
+
+    // Ensure minimum duration
+    totalDur = Math.max(totalDur, 0.2)
 
     let trailParticles: TrailParticle[] = []
     let lastTrailTime = 0
 
     const animate = (now: number) => {
       const elapsed = (now - startTime) / 1000
+
+      // Find which segment and progress
       let remaining = elapsed
       let segIdx = 0
       let segT = 0
-
-      // Find which segment we're on
       const maxSeg = col.hit ? col.vectorIdx + 1 : vectors.length
+
       for (segIdx = 0; segIdx < maxSeg; segIdx++) {
         const dur = segDurations[segIdx]
+        if (dur <= 0) continue
         if (remaining <= dur) {
-          segT = dur > 0 ? remaining / dur : 1
+          segT = remaining / dur
           break
         }
         remaining -= dur
-        if (segIdx === maxSeg - 1) {
-          segT = 1
-        }
+        if (segIdx === maxSeg - 1) segT = 1
       }
       segIdx = Math.min(segIdx, maxSeg - 1)
 
-      // Ease — slight ease-in-out per segment
-      const eased = segT < 0.5 ? 2 * segT * segT : 1 - Math.pow(-2 * segT + 2, 2) / 2
+      // Ease-in-out per segment
+      const eased =
+        segT < 0.5
+          ? 2 * segT * segT
+          : 1 - Math.pow(-2 * segT + 2, 2) / 2
 
       const v = vectors[segIdx]
       if (!v) return
@@ -262,23 +267,21 @@ export default function VectorVoyager() {
         y: v.start.y + d.y * eased,
       }
 
-      // Ship angle
       const angle = Math.atan2(-d.y, d.x)
       setShipPos(pos)
       setShipAngle(angle)
 
-      // Engine trail
-      if (now - lastTrailTime > 40) {
+      // Engine trail particles
+      if (now - lastTrailTime > 35) {
         lastTrailTime = now
         const norm = vecNormalize(d)
         trailParticles = [
-          ...trailParticles.filter((p) => p.opacity > 0.05).map((p) => ({
-            ...p,
-            opacity: p.opacity * 0.85,
-          })),
+          ...trailParticles
+            .filter((p) => p.opacity > 0.05)
+            .map((p) => ({ ...p, opacity: p.opacity * 0.82 })),
           {
-            x: pos.x - norm.x * 8 + (Math.random() - 0.5) * 4,
-            y: pos.y + norm.y * 8 + (Math.random() - 0.5) * 4,
+            x: pos.x - norm.x * 10 + (Math.random() - 0.5) * 5,
+            y: pos.y + norm.y * 10 + (Math.random() - 0.5) * 5,
             opacity: 1,
             id: trailIdCounter++,
           },
@@ -286,14 +289,13 @@ export default function VectorVoyager() {
         setTrail([...trailParticles])
       }
 
-      // Check if done
+      // Animation end
       if (elapsed >= totalDur) {
         if (col.hit) {
-          // Collision!
           const particles: Vec2[] = []
-          for (let i = 0; i < 10; i++) {
-            const a = (Math.PI * 2 * i) / 10
-            const dist = 10 + Math.random() * 20
+          for (let i = 0; i < 12; i++) {
+            const a = (Math.PI * 2 * i) / 12
+            const dist = 8 + Math.random() * 22
             particles.push({
               x: pos.x + Math.cos(a) * dist,
               y: pos.y + Math.sin(a) * dist,
@@ -302,11 +304,10 @@ export default function VectorVoyager() {
           setExplosionParticles(particles)
           setPhase('collision')
         } else if (reachesTarget(vectors, level.target, level.targetRadius)) {
-          // Victory!
           const particles: Vec2[] = []
-          for (let i = 0; i < 12; i++) {
-            const a = (Math.PI * 2 * i) / 12
-            const dist = 10 + Math.random() * 25
+          for (let i = 0; i < 14; i++) {
+            const a = (Math.PI * 2 * i) / 14
+            const dist = 8 + Math.random() * 30
             particles.push({
               x: level.target.x + Math.cos(a) * dist,
               y: level.target.y + Math.sin(a) * dist,
@@ -328,38 +329,44 @@ export default function VectorVoyager() {
 
   // ─── Clear / Undo / Level change ──────────────────────────────
 
+  const resetState = useCallback(
+    (start: Vec2) => {
+      cancelAnimationFrame(animFrameRef.current)
+      setVectors([])
+      setPhase('planning')
+      setShipPos(start)
+      setShipAngle(0)
+      setTrail([])
+      setExplosionParticles([])
+      setVictoryParticles([])
+      setDraggingIdx(-1)
+    },
+    []
+  )
+
   const handleClear = useCallback(() => {
-    cancelAnimationFrame(animFrameRef.current)
-    setVectors([])
-    setPhase('planning')
-    setShipPos(level.shipStart)
-    setShipAngle(0)
-    setTrail([])
-    setExplosionParticles([])
-    setVictoryParticles([])
-  }, [level.shipStart])
+    resetState(level.shipStart)
+  }, [level.shipStart, resetState])
 
   const handleUndo = useCallback(() => {
     if (phase !== 'planning' || vectors.length === 0) return
     setVectors((prev) => prev.slice(0, -1))
   }, [phase, vectors.length])
 
-  const handleLevelChange = useCallback((levelId: number) => {
-    cancelAnimationFrame(animFrameRef.current)
-    const newLevel = LEVELS.find((l) => l.id === levelId) ?? LEVELS[0]
-    setCurrentLevelId(levelId)
-    setVectors([])
-    setPhase('planning')
-    setShipPos(newLevel.shipStart)
-    setShipAngle(0)
-    setTrail([])
-    setExplosionParticles([])
-    setVictoryParticles([])
-  }, [])
+  const handleLevelChange = useCallback(
+    (levelId: number) => {
+      const newLevel = LEVELS.find((l) => l.id === levelId) ?? LEVELS[0]
+      setCurrentLevelId(levelId)
+      resetState(newLevel.shipStart)
+    },
+    [resetState]
+  )
 
   // Cleanup on unmount
   useEffect(() => {
-    return () => { cancelAnimationFrame(animFrameRef.current) }
+    return () => {
+      cancelAnimationFrame(animFrameRef.current)
+    }
   }, [])
 
   return (
@@ -372,10 +379,7 @@ export default function VectorVoyager() {
         <p className={styles.subtitle}>{level.subtitle}</p>
       </header>
 
-      {/* Hint */}
-      {phase === 'planning' && (
-        <p className={styles.hint}>{level.hint}</p>
-      )}
+      {phase === 'planning' && <p className={styles.hint}>{level.hint}</p>}
 
       <div className={styles.boardWrapper}>
         <GameBoard
@@ -386,7 +390,7 @@ export default function VectorVoyager() {
           shipPos={shipPos}
           shipAngle={shipAngle}
           trail={trail}
-          draggingIdx={isDragging.current && dragMode.current === 'adjust' ? dragVectorIdx.current : -1}
+          draggingIdx={draggingIdx}
           onDragStart={handleDragStart}
           onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
