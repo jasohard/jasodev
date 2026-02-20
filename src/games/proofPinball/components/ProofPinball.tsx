@@ -3,11 +3,27 @@
  *
  * Geometry meets billiards. Aim and launch a ball through geometric rooms,
  * bouncing off walls with angle-of-reflection physics.
+ *
+ * Features:
+ * - Adjustable launch power (drag distance = power)
+ * - Energy-based ball physics (energy depletes per bounce)
+ * - Goal zones (circular areas the ball must enter)
+ * - Minimum bounce requirements per level
  */
 
 import { useReducer, useCallback, useRef, useEffect, useState, useMemo } from 'react'
 import { gameReducer, initializeLevel } from '../gameState'
-import { computeBallPath, computePredictionPath, interpolatePath, pathLength, directionFromAngle, radToDeg } from '../physics'
+import {
+  computeBallPath,
+  computePredictionPath,
+  interpolatePath,
+  pathLength,
+  getEnergyAtFraction,
+  directionFromAngle,
+  radToDeg,
+  powerToSpeed,
+  distance,
+} from '../physics'
 import { LEVELS } from '../levels'
 import type { Vec2 } from '../types'
 import styles from './ProofPinball.module.css'
@@ -15,9 +31,13 @@ import styles from './ProofPinball.module.css'
 const VIEWBOX_W = 400
 const VIEWBOX_H = 600
 const BALL_RADIUS = 7
-const TARGET_GLOW_ID = 'target-glow'
 const BALL_GLOW_ID = 'ball-glow'
-const BALL_SPEED = 450 // px per second in viewBox units
+const GOAL_GLOW_ID = 'goal-glow'
+
+/** Max drag distance for full power */
+const MAX_DRAG_DISTANCE = 120
+/** Min drag distance to register power */
+const MIN_DRAG_DISTANCE = 15
 
 export default function ProofPinball() {
   const [state, dispatch] = useReducer(
@@ -29,11 +49,10 @@ export default function ProofPinball() {
   const svgRef = useRef<SVGSVGElement>(null)
   const animFrameRef = useRef<number>(0)
   const animStartRef = useRef<number>(0)
+  const goalAnnouncedRef = useRef(false)
+  const dragStartRef = useRef<Vec2 | null>(null)
 
-  // Track which targets have been "announced" during current animation
-  const announcedTargetsRef = useRef<Set<string>>(new Set())
-
-  const { level, phase, aimAngle, targets, reflectors, currentPath, animationProgress, shotsTaken, stars, levelStars, selectedReflectorId, isAiming } = state
+  const { level, phase, aimAngle, launchPower, reflectors, currentPath, animationProgress, currentEnergy, shotsTaken, goalReached, stars, levelStars, selectedReflectorId, isAiming } = state
 
   // ── SVG coordinate conversion ────────────────────────
   const svgPoint = useCallback(
@@ -57,9 +76,6 @@ export default function ProofPinball() {
       if (!pt) return
 
       const lp = level.launchPoint
-      const dx = pt.x - lp.x
-      const dy = pt.y - lp.y
-      const dist = Math.sqrt(dx * dx + dy * dy)
 
       // Check if clicking on a reflector
       for (const ref of reflectors) {
@@ -77,7 +93,11 @@ export default function ProofPinball() {
       }
 
       // Start aiming if near launch point
-      if (dist < 120) {
+      const dx = pt.x - lp.x
+      const dy = pt.y - lp.y
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      if (dist < MAX_DRAG_DISTANCE + 30) {
+        dragStartRef.current = pt
         dispatch({ type: 'START_AIM' })
         svgRef.current?.setPointerCapture(e.pointerId)
       }
@@ -97,6 +117,11 @@ export default function ProofPinball() {
         // Angle: 0 = right, positive = CCW (math convention), but SVG y is flipped
         const angle = radToDeg(Math.atan2(-dy, dx))
         dispatch({ type: 'SET_AIM_ANGLE', angle })
+
+        // Power = drag distance from launch point, clamped
+        const dragDist = Math.sqrt(dx * dx + dy * dy)
+        const power = Math.max(0, Math.min(1, (dragDist - MIN_DRAG_DISTANCE) / (MAX_DRAG_DISTANCE - MIN_DRAG_DISTANCE)))
+        dispatch({ type: 'SET_LAUNCH_POWER', power })
       } else if (selectedReflectorId) {
         const ref = reflectors.find((r) => r.id === selectedReflectorId)
         if (ref) {
@@ -112,7 +137,6 @@ export default function ProofPinball() {
 
   const handlePointerUp = useCallback(
     (e: React.PointerEvent) => {
-      // Release pointer capture to avoid stuck input states
       svgRef.current?.releasePointerCapture(e.pointerId)
 
       if (isAiming && phase === 'aiming') {
@@ -122,15 +146,17 @@ export default function ProofPinball() {
           aimAngle,
           level.walls,
           reflectors,
-          targets,
+          level.goalZone,
           level.maxBounces,
-          level.minBounces
+          level.minBounces,
+          launchPower
         )
-        announcedTargetsRef.current = new Set()
+        goalAnnouncedRef.current = false
         dispatch({ type: 'FIRE_SHOT', path })
+        dragStartRef.current = null
       }
     },
-    [isAiming, phase, aimAngle, level, reflectors, targets, dispatch]
+    [isAiming, phase, aimAngle, launchPower, level, reflectors]
   )
 
   // ── Ball animation ───────────────────────────────────
@@ -138,37 +164,32 @@ export default function ProofPinball() {
     if (phase !== 'animating' || !currentPath) return
 
     const totalLen = pathLength(currentPath.points)
-    const duration = (totalLen / BALL_SPEED) * 1000 // ms
+    // Speed varies with power: higher power = faster ball
+    const speed = powerToSpeed(launchPower)
+    const duration = (totalLen / speed) * 1000 // ms
 
     animStartRef.current = performance.now()
 
     const animate = (now: number) => {
       const elapsed = now - animStartRef.current
       const progress = Math.min(elapsed / duration, 1)
+      const energy = getEnergyAtFraction(currentPath.energyAtPoints, currentPath.points, progress)
 
-      dispatch({ type: 'UPDATE_ANIMATION', progress })
+      dispatch({ type: 'UPDATE_ANIMATION', progress, energy })
 
-      // Check if ball has reached any targets
-      if (currentPath.targetsHit.length > 0) {
-        const ballPos = interpolatePath(currentPath.points, progress)
-        for (const targetId of currentPath.targetsHit) {
-          if (announcedTargetsRef.current.has(targetId)) continue
-          const target = targets.find((t) => t.id === targetId)
-          if (target) {
-            const dx = ballPos.x - target.center.x
-            const dy = ballPos.y - target.center.y
-            if (Math.sqrt(dx * dx + dy * dy) < target.radius + BALL_RADIUS) {
-              announcedTargetsRef.current.add(targetId)
-              dispatch({ type: 'HIT_TARGET', targetId })
-            }
-          }
+      // Check if ball has reached goal zone
+      if (currentPath.goalReached && !goalAnnouncedRef.current) {
+        // Check if animation progress has reached the goal point
+        const goalFraction = getGoalFraction(currentPath)
+        if (progress >= goalFraction) {
+          goalAnnouncedRef.current = true
+          dispatch({ type: 'GOAL_REACHED' })
         }
       }
 
       if (progress < 1) {
         animFrameRef.current = requestAnimationFrame(animate)
       } else {
-        // Animation complete
         dispatch({ type: 'SHOT_COMPLETE' })
       }
     }
@@ -178,7 +199,7 @@ export default function ProofPinball() {
     return () => {
       cancelAnimationFrame(animFrameRef.current)
     }
-  }, [phase, currentPath, targets])
+  }, [phase, currentPath, launchPower])
 
   // Reset hint when level changes
   useEffect(() => {
@@ -219,8 +240,6 @@ export default function ProofPinball() {
   const visibleBounces =
     phase === 'animating' && currentPath
       ? currentPath.bounces.filter((_, i) => {
-          // A bounce at index i happens between points[i] and points[i+1]
-          // Show it if animationProgress is past that point
           const totalLen = pathLength(currentPath.points)
           if (totalLen === 0) return false
           let accumulated = 0
@@ -279,6 +298,13 @@ export default function ProofPinball() {
           .map((p) => `L ${p.x} ${p.y}`)
           .join(' ')
       : ''
+
+  // ── Power bar color ────────────────────────────────────
+  const powerColor = launchPower < 0.3 ? '#4caf50' : launchPower < 0.7 ? '#ffc107' : '#ff5722'
+
+  // ── Energy bar color ──────────────────────────────────
+  const energyColor = currentEnergy > 0.5 ? '#4caf50' : currentEnergy > 0.2 ? '#ffc107' : '#ff5722'
+  const energyPercent = Math.round(currentEnergy * 100)
 
   // ── Render ───────────────────────────────────────────
 
@@ -353,17 +379,17 @@ export default function ProofPinball() {
           style={{ touchAction: 'none' }}
         >
           <defs>
-            {/* Target glow filter */}
-            <filter id={TARGET_GLOW_ID} x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="4" result="blur" />
+            {/* Ball glow */}
+            <filter id={BALL_GLOW_ID} x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur stdDeviation="3" result="blur" />
               <feMerge>
                 <feMergeNode in="blur" />
                 <feMergeNode in="SourceGraphic" />
               </feMerge>
             </filter>
-            {/* Ball glow */}
-            <filter id={BALL_GLOW_ID} x="-100%" y="-100%" width="300%" height="300%">
-              <feGaussianBlur stdDeviation="3" result="blur" />
+            {/* Goal glow */}
+            <filter id={GOAL_GLOW_ID} x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="6" result="blur" />
               <feMerge>
                 <feMergeNode in="blur" />
                 <feMergeNode in="SourceGraphic" />
@@ -374,10 +400,21 @@ export default function ProofPinball() {
               <stop offset="0%" stopColor="#00bcd4" stopOpacity="0.1" />
               <stop offset="100%" stopColor="#00bcd4" stopOpacity="0.7" />
             </linearGradient>
+            {/* Goal radial gradient */}
+            <radialGradient id="goal-fill">
+              <stop offset="0%" stopColor="#4caf50" stopOpacity="0.15" />
+              <stop offset="60%" stopColor="#4caf50" stopOpacity="0.08" />
+              <stop offset="100%" stopColor="#4caf50" stopOpacity="0" />
+            </radialGradient>
+            <radialGradient id="goal-fill-reached">
+              <stop offset="0%" stopColor="#ffd700" stopOpacity="0.3" />
+              <stop offset="60%" stopColor="#ffd700" stopOpacity="0.15" />
+              <stop offset="100%" stopColor="#ffd700" stopOpacity="0" />
+            </radialGradient>
           </defs>
 
           {/* Background */}
-          <rect width={VIEWBOX_W} height={VIEWBOX_H} fill="#1a1a2e" />
+          <rect width={VIEWBOX_W} height={VIEWBOX_H} fill="#0d1117" />
 
           {/* Subtle grid */}
           <g opacity="0.06">
@@ -432,7 +469,6 @@ export default function ProofPinball() {
             const isSelected = ref.id === selectedReflectorId
             return (
               <g key={ref.id}>
-                {/* Reflector line */}
                 <line
                   x1={ref.center.x - dx}
                   y1={ref.center.y - dy}
@@ -442,7 +478,6 @@ export default function ProofPinball() {
                   strokeWidth={isSelected ? 5 : 4}
                   strokeLinecap="round"
                 />
-                {/* Rotation handle */}
                 <circle
                   cx={ref.center.x + dx}
                   cy={ref.center.y + dy}
@@ -450,7 +485,6 @@ export default function ProofPinball() {
                   fill={isSelected ? '#4fc3f7' : '#2196f3'}
                   opacity={0.8}
                 />
-                {/* Center dot */}
                 <circle
                   cx={ref.center.x}
                   cy={ref.center.y}
@@ -458,7 +492,6 @@ export default function ProofPinball() {
                   fill="#2196f3"
                   opacity={0.5}
                 />
-                {/* Invisible touch target */}
                 <circle
                   cx={ref.center.x}
                   cy={ref.center.y}
@@ -470,107 +503,16 @@ export default function ProofPinball() {
             )
           })}
 
-          {/* Targets */}
-          {targets.map((target) => {
-            // During animation, check if min bounces have been met
-            const isAnimating = phase === 'animating'
-            const bouncesReachedSoFar = visibleBounces.length
-            const isLocked = level.minBounces > 0 && isAnimating && bouncesReachedSoFar < level.minBounces && !target.hit
-            // In aiming phase, show targets as "locked-looking" if minBounces > 0
-            const showLockedStyle = level.minBounces > 0 && phase === 'aiming' && !target.hit
-
-            const targetColor = target.hit
-              ? '#4caf50'
-              : (isLocked || showLockedStyle)
-                ? '#666'
-                : '#ffd700'
-            const targetFill = target.hit
-              ? '#4caf50'
-              : (isLocked || showLockedStyle)
-                ? 'rgba(100, 100, 100, 0.15)'
-                : 'rgba(255, 215, 0, 0.15)'
-
-            return (
-              <g key={target.id}>
-                {/* Outer glow ring */}
-                {!target.hit && (
-                  <circle
-                    cx={target.center.x}
-                    cy={target.center.y}
-                    r={target.radius + 4}
-                    fill="none"
-                    stroke={targetColor}
-                    strokeWidth="2"
-                    strokeDasharray="4 4"
-                    opacity="0.5"
-                    filter={(!isLocked && !showLockedStyle) ? `url(#${TARGET_GLOW_ID})` : undefined}
-                  >
-                    <animateTransform
-                      attributeName="transform"
-                      type="rotate"
-                      from={`0 ${target.center.x} ${target.center.y}`}
-                      to={`360 ${target.center.x} ${target.center.y}`}
-                      dur="8s"
-                      repeatCount="indefinite"
-                    />
-                  </circle>
-                )}
-                {/* Main target */}
-                <circle
-                  cx={target.center.x}
-                  cy={target.center.y}
-                  r={target.radius}
-                  fill={targetFill}
-                  stroke={targetColor}
-                  strokeWidth="2"
-                />
-                {/* Inner ring */}
-                <circle
-                  cx={target.center.x}
-                  cy={target.center.y}
-                  r={target.radius * 0.5}
-                  fill="none"
-                  stroke={target.hit ? '#81c784' : targetColor}
-                  strokeWidth="1"
-                  opacity="0.6"
-                />
-                {/* Center dot */}
-                <circle
-                  cx={target.center.x}
-                  cy={target.center.y}
-                  r={3}
-                  fill={target.hit ? '#81c784' : targetColor}
-                />
-                {/* Lock icon when minBounces not met */}
-                {(isLocked || showLockedStyle) && !target.hit && (
-                  <text
-                    x={target.center.x}
-                    y={target.center.y + 5}
-                    textAnchor="middle"
-                    fontSize="14"
-                    fill="#888"
-                    opacity="0.8"
-                    pointerEvents="none"
-                  >
-                    🔒
-                  </text>
-                )}
-                {/* Hit check mark */}
-                {target.hit && (
-                  <text
-                    x={target.center.x}
-                    y={target.center.y + 5}
-                    textAnchor="middle"
-                    fontSize="18"
-                    fill="#fff"
-                    fontWeight="bold"
-                  >
-                    ✓
-                  </text>
-                )}
-              </g>
-            )
-          })}
+          {/* Goal Zone */}
+          <GoalZoneRenderer
+            center={level.goalZone.center}
+            radius={level.goalZone.radius}
+            reached={goalReached}
+            locked={level.minBounces > 0 && phase === 'aiming'}
+            isAnimating={phase === 'animating'}
+            bouncesReached={visibleBounces.length}
+            minBounces={level.minBounces}
+          />
 
           {/* Completed trail (from previous shot) */}
           {completedTrailD && (
@@ -615,7 +557,6 @@ export default function ProofPinball() {
 
           {/* Launch point */}
           <g>
-            {/* Pulse ring (aiming mode) */}
             {phase === 'aiming' && !isAiming && (
               <circle
                 cx={level.launchPoint.x}
@@ -630,7 +571,6 @@ export default function ProofPinball() {
                 <animate attributeName="opacity" from="0.5" to="0" dur="1.5s" repeatCount="indefinite" />
               </circle>
             )}
-            {/* Outer ring */}
             <circle
               cx={level.launchPoint.x}
               cy={level.launchPoint.y}
@@ -640,7 +580,6 @@ export default function ProofPinball() {
               strokeWidth="1.5"
               opacity={phase === 'aiming' ? 0.6 : 0.3}
             />
-            {/* Inner dot */}
             <circle
               cx={level.launchPoint.x}
               cy={level.launchPoint.y}
@@ -648,7 +587,6 @@ export default function ProofPinball() {
               fill={phase === 'aiming' ? '#4caf50' : '#2e7d32'}
               filter={phase === 'aiming' ? `url(#${BALL_GLOW_ID})` : undefined}
             />
-            {/* Invisible touch target */}
             {phase === 'aiming' && (
               <circle
                 cx={level.launchPoint.x}
@@ -659,6 +597,15 @@ export default function ProofPinball() {
               />
             )}
           </g>
+
+          {/* Power indicator (shown while aiming/dragging) */}
+          {phase === 'aiming' && isAiming && (
+            <PowerIndicator
+              center={level.launchPoint}
+              power={launchPower}
+              angle={aimAngle}
+            />
+          )}
 
           {/* Protractor arc (when aiming) */}
           {phase === 'aiming' && isAiming && (
@@ -674,31 +621,31 @@ export default function ProofPinball() {
             <g>
               {(() => {
                 const dir = directionFromAngle(aimAngle)
-                const len = 40
+                const len = 30 + launchPower * 20
                 return (
                   <line
                     x1={level.launchPoint.x}
                     y1={level.launchPoint.y}
                     x2={level.launchPoint.x + dir.x * len}
                     y2={level.launchPoint.y + dir.y * len}
-                    stroke="#4caf50"
-                    strokeWidth="2"
+                    stroke={powerColor}
+                    strokeWidth={2 + launchPower * 2}
                     opacity="0.8"
                     strokeLinecap="round"
                   />
                 )
               })()}
-              {/* Arrow head */}
               {(() => {
                 const dir = directionFromAngle(aimAngle)
-                const tipX = level.launchPoint.x + dir.x * 40
-                const tipY = level.launchPoint.y + dir.y * 40
-                const perpX = -dir.y * 5
-                const perpY = dir.x * 5
+                const len = 30 + launchPower * 20
+                const tipX = level.launchPoint.x + dir.x * len
+                const tipY = level.launchPoint.y + dir.y * len
+                const perpX = -dir.y * (4 + launchPower * 3)
+                const perpY = dir.x * (4 + launchPower * 3)
                 return (
                   <polygon
                     points={`${tipX + dir.x * 8},${tipY + dir.y * 8} ${tipX + perpX},${tipY + perpY} ${tipX - perpX},${tipY - perpY}`}
-                    fill="#4caf50"
+                    fill={powerColor}
                     opacity="0.8"
                   />
                 )
@@ -712,23 +659,23 @@ export default function ProofPinball() {
               <circle
                 cx={ballPos.x}
                 cy={ballPos.y}
-                r={BALL_RADIUS}
+                r={BALL_RADIUS + (1 - currentEnergy) * -2}
                 fill="#ffffff"
                 filter={`url(#${BALL_GLOW_ID})`}
+                opacity={0.5 + currentEnergy * 0.5}
               />
               <circle
                 cx={ballPos.x}
                 cy={ballPos.y}
                 r={BALL_RADIUS * 0.5}
                 fill="#e0f7fa"
+                opacity={0.5 + currentEnergy * 0.5}
               />
             </g>
           )}
 
-          {/* Hit particles */}
-          {targets.filter((t) => t.hit).map((target) => (
-            <HitParticles key={`particles-${target.id}`} center={target.center} />
-          ))}
+          {/* Goal reached particles */}
+          {goalReached && <GoalReachedParticles center={level.goalZone.center} />}
 
           {/* Bounce counter during animation */}
           {phase === 'animating' && (
@@ -764,6 +711,25 @@ export default function ProofPinball() {
             </g>
           )}
 
+          {/* Energy bar during animation */}
+          {phase === 'animating' && (
+            <g>
+              <rect x={8} y={8} width={80} height={24} rx={6} fill="rgba(0,0,0,0.5)" />
+              <rect x={12} y={14} width={72 * currentEnergy} height={12} rx={4} fill={energyColor} opacity="0.8" />
+              <text
+                x={48}
+                y={23}
+                textAnchor="middle"
+                fontSize="9"
+                fontFamily="monospace"
+                fill="#fff"
+                fontWeight="600"
+              >
+                {energyPercent}% energy
+              </text>
+            </g>
+          )}
+
           {/* Min bounces requirement badge (shown when aiming) */}
           {phase === 'aiming' && level.minBounces > 0 && (
             <g>
@@ -777,24 +743,7 @@ export default function ProofPinball() {
                 fill="#ff6b6b"
                 fontWeight="600"
               >
-                🔒 {level.minBounces}+ bounces
-              </text>
-            </g>
-          )}
-
-          {/* Target status during animation */}
-          {phase === 'animating' && targets.length > 1 && (
-            <g>
-              <rect x={8} y={8} width={80} height={24} rx={6} fill="rgba(0,0,0,0.5)" />
-              <text
-                x={48}
-                y={24}
-                textAnchor="middle"
-                fontSize="11"
-                fontFamily="monospace"
-                fill={targets.every((t) => t.hit) ? '#4caf50' : '#ffd700'}
-              >
-                {targets.filter((t) => t.hit).length}/{targets.length} targets
+                {level.minBounces}+ bounces
               </text>
             </g>
           )}
@@ -847,9 +796,7 @@ export default function ProofPinball() {
           <div className={styles.completionOverlay}>
             <div className={styles.failedTitle}>Out of Shots!</div>
             <div className={styles.completionMessage}>
-              You used all {level.maxShots} shots without hitting every target.
-              <br />
-              Targets hit: {targets.filter((t) => t.hit).length}/{targets.length}
+              You used all {level.maxShots} shots without reaching the goal.
             </div>
             <div className={styles.completionActions}>
               <button
@@ -891,9 +838,21 @@ export default function ProofPinball() {
         >
           Levels
         </button>
-        <span className={styles.angleDisplay}>
-          {Math.round(aimAngle)}°
-        </span>
+        <div className={styles.controlsCenter}>
+          <span className={styles.angleDisplay}>
+            {Math.round(aimAngle)}°
+          </span>
+          {phase === 'aiming' && (
+            <span className={styles.powerDisplay} style={{ color: powerColor }}>
+              {Math.round(launchPower * 100)}%
+            </span>
+          )}
+          {phase === 'animating' && (
+            <span className={styles.energyDisplay} style={{ color: energyColor }}>
+              {energyPercent}%
+            </span>
+          )}
+        </div>
         <button
           className={`${styles.controlButton} ${styles.resetButton}`}
           onClick={() => dispatch({ type: 'RESET_LEVEL' })}
@@ -905,7 +864,204 @@ export default function ProofPinball() {
   )
 }
 
+// ── Helper functions ─────────────────────────────────────
+
+/** Calculate the fraction along the path where the goal is reached */
+function getGoalFraction(path: { points: Vec2[]; goalReachedAtPoint: number }): number {
+  if (path.goalReachedAtPoint < 0) return 2 // Never reached
+  const totalLen = pathLength(path.points)
+  if (totalLen === 0) return 0
+
+  let accumulated = 0
+  for (let i = 1; i <= path.goalReachedAtPoint && i < path.points.length; i++) {
+    accumulated += distance(path.points[i - 1], path.points[i])
+  }
+  return accumulated / totalLen
+}
+
 // ── Sub-components ──────────────────────────────────────
+
+/** Goal Zone visual - concentric rings with pulse animation */
+function GoalZoneRenderer({
+  center,
+  radius,
+  reached,
+  locked,
+  isAnimating,
+  bouncesReached,
+  minBounces,
+}: {
+  center: Vec2
+  radius: number
+  reached: boolean
+  locked: boolean
+  isAnimating: boolean
+  bouncesReached: number
+  minBounces: number
+}) {
+  const isGoalLocked = isAnimating && minBounces > 0 && bouncesReached < minBounces
+  const goalColor = reached ? '#ffd700' : (locked || isGoalLocked) ? '#555' : '#4caf50'
+  const fillId = reached ? 'url(#goal-fill-reached)' : 'url(#goal-fill)'
+
+  return (
+    <g>
+      {/* Background fill */}
+      <circle
+        cx={center.x}
+        cy={center.y}
+        r={radius}
+        fill={fillId}
+        filter={(!locked && !isGoalLocked) ? `url(#${GOAL_GLOW_ID})` : undefined}
+      />
+      {/* Outer ring */}
+      <circle
+        cx={center.x}
+        cy={center.y}
+        r={radius}
+        fill="none"
+        stroke={goalColor}
+        strokeWidth="2.5"
+        opacity={reached ? 1 : 0.7}
+        strokeDasharray={reached ? 'none' : '8 4'}
+      >
+        {!reached && (
+          <animateTransform
+            attributeName="transform"
+            type="rotate"
+            from={`0 ${center.x} ${center.y}`}
+            to={`360 ${center.x} ${center.y}`}
+            dur="12s"
+            repeatCount="indefinite"
+          />
+        )}
+      </circle>
+      {/* Middle ring */}
+      <circle
+        cx={center.x}
+        cy={center.y}
+        r={radius * 0.65}
+        fill="none"
+        stroke={goalColor}
+        strokeWidth="1.5"
+        opacity={0.4}
+        strokeDasharray="4 4"
+      >
+        {!reached && (
+          <animateTransform
+            attributeName="transform"
+            type="rotate"
+            from={`360 ${center.x} ${center.y}`}
+            to={`0 ${center.x} ${center.y}`}
+            dur="8s"
+            repeatCount="indefinite"
+          />
+        )}
+      </circle>
+      {/* Inner ring */}
+      <circle
+        cx={center.x}
+        cy={center.y}
+        r={radius * 0.35}
+        fill="none"
+        stroke={goalColor}
+        strokeWidth="1"
+        opacity={0.3}
+      />
+      {/* Center dot */}
+      <circle
+        cx={center.x}
+        cy={center.y}
+        r={3}
+        fill={goalColor}
+        opacity={0.6}
+      />
+      {/* Pulse ring animation */}
+      {!reached && !locked && !isGoalLocked && (
+        <circle
+          cx={center.x}
+          cy={center.y}
+          r={radius}
+          fill="none"
+          stroke={goalColor}
+          strokeWidth="1"
+          opacity="0"
+        >
+          <animate attributeName="r" from={`${radius}`} to={`${radius + 12}`} dur="2s" repeatCount="indefinite" />
+          <animate attributeName="opacity" from="0.4" to="0" dur="2s" repeatCount="indefinite" />
+        </circle>
+      )}
+      {/* Lock icon when min bounces not met */}
+      {(locked || isGoalLocked) && !reached && (
+        <text
+          x={center.x}
+          y={center.y + 6}
+          textAnchor="middle"
+          fontSize="18"
+          fill="#888"
+          opacity="0.7"
+          pointerEvents="none"
+        >
+          {minBounces}+
+        </text>
+      )}
+      {/* Check mark when reached */}
+      {reached && (
+        <text
+          x={center.x}
+          y={center.y + 7}
+          textAnchor="middle"
+          fontSize="22"
+          fill="#fff"
+          fontWeight="bold"
+          pointerEvents="none"
+        >
+          ✓
+        </text>
+      )}
+    </g>
+  )
+}
+
+/** Power indicator showing launch strength */
+function PowerIndicator({
+  center,
+  power,
+  angle,
+}: {
+  center: Vec2
+  power: number
+  angle: number
+}) {
+  const barWidth = 50
+  const barHeight = 8
+  const x = center.x - barWidth / 2
+  const y = center.y + 35
+  const fillWidth = power * barWidth
+
+  const color = power < 0.3 ? '#4caf50' : power < 0.7 ? '#ffc107' : '#ff5722'
+  const speedLabel = `${Math.round(powerToSpeed(power))} px/s`
+
+  return (
+    <g opacity="0.8">
+      {/* Background bar */}
+      <rect x={x} y={y} width={barWidth} height={barHeight} rx={4} fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)" strokeWidth="0.5" />
+      {/* Fill bar */}
+      <rect x={x} y={y} width={fillWidth} height={barHeight} rx={4} fill={color} />
+      {/* Speed label */}
+      <text
+        x={center.x}
+        y={y + barHeight + 12}
+        textAnchor="middle"
+        fontSize="8"
+        fontFamily="monospace"
+        fill={color}
+        opacity="0.8"
+      >
+        {speedLabel}
+      </text>
+    </g>
+  )
+}
 
 /** Protractor arc overlay shown while aiming */
 function ProtractorArc({
@@ -917,12 +1073,11 @@ function ProtractorArc({
   angle: number
   radius: number
 }) {
-  // Draw tick marks every 15 degrees
   const ticks: { x1: number; y1: number; x2: number; y2: number; label?: string }[] = []
   for (let deg = 0; deg < 360; deg += 15) {
     const rad = (deg * Math.PI) / 180
     const cos = Math.cos(rad)
-    const sin = -Math.sin(rad) // SVG y is flipped
+    const sin = -Math.sin(rad)
     const isMajor = deg % 45 === 0
     const innerR = isMajor ? radius - 12 : radius - 6
     ticks.push({
@@ -936,7 +1091,6 @@ function ProtractorArc({
 
   return (
     <g opacity="0.6">
-      {/* Background arc */}
       <circle
         cx={center.x}
         cy={center.y}
@@ -945,7 +1099,6 @@ function ProtractorArc({
         stroke="rgba(0, 188, 212, 0.2)"
         strokeWidth="1"
       />
-      {/* Tick marks */}
       {ticks.map((tick, i) => (
         <g key={i}>
           <line
@@ -971,7 +1124,6 @@ function ProtractorArc({
           )}
         </g>
       ))}
-      {/* Current angle indicator line */}
       {(() => {
         const rad = (angle * Math.PI) / 180
         return (
@@ -1005,23 +1157,18 @@ function BounceAngleDisplay({
 }) {
   const { position: pos, incidenceAngle, normal, incoming, outgoing } = bounce
   const arcRadius = 20
-
-  // Draw the normal line
   const normalLen = 25
 
-  // Draw incidence and reflection arcs
-  const inAngleRad = Math.atan2(-incoming.y, -incoming.x) // reverse incoming direction
+  const inAngleRad = Math.atan2(-incoming.y, -incoming.x)
   const outAngleRad = Math.atan2(outgoing.y, outgoing.x)
   const normalAngleRad = Math.atan2(normal.y, normal.x)
 
-  // Small arcs showing angle in and angle out
   const incArcStart = normalAngleRad
   const incArcEnd = inAngleRad
   const refArcStart = outAngleRad
   const refArcEnd = normalAngleRad
 
   function arcPath(cx: number, cy: number, r: number, startAngle: number, endAngle: number): string {
-    // Normalize the sweep
     let sweep = endAngle - startAngle
     while (sweep > Math.PI) sweep -= 2 * Math.PI
     while (sweep < -Math.PI) sweep += 2 * Math.PI
@@ -1038,7 +1185,6 @@ function BounceAngleDisplay({
 
   return (
     <g>
-      {/* Normal line (dashed) */}
       <line
         x1={pos.x - normal.x * normalLen}
         y1={pos.y - normal.y * normalLen}
@@ -1049,7 +1195,6 @@ function BounceAngleDisplay({
         strokeDasharray="3 3"
         opacity="0.6"
       />
-      {/* Incidence arc */}
       <path
         d={arcPath(pos.x, pos.y, arcRadius, incArcStart, incArcEnd)}
         fill="none"
@@ -1057,7 +1202,6 @@ function BounceAngleDisplay({
         strokeWidth="1.5"
         opacity="0.8"
       />
-      {/* Reflection arc */}
       <path
         d={arcPath(pos.x, pos.y, arcRadius, refArcStart, refArcEnd)}
         fill="none"
@@ -1065,7 +1209,6 @@ function BounceAngleDisplay({
         strokeWidth="1.5"
         opacity="0.8"
       />
-      {/* Angle label */}
       <text
         x={pos.x + normal.x * (arcRadius + 14)}
         y={pos.y + normal.y * (arcRadius + 14)}
@@ -1078,55 +1221,55 @@ function BounceAngleDisplay({
       >
         {Math.round(incidenceAngle)}°
       </text>
-      {/* Bounce flash dot */}
       <circle cx={pos.x} cy={pos.y} r={3} fill="#00bcd4" opacity="0.7" />
     </g>
   )
 }
 
-/** Particle burst effect when a target is hit */
-function HitParticles({ center }: { center: Vec2 }) {
-  const particleCount = 8
+/** Particle burst when goal is reached */
+function GoalReachedParticles({ center }: { center: Vec2 }) {
+  const particleCount = 12
   return (
     <g>
       {Array.from({ length: particleCount }, (_, i) => {
         const angle = (i / particleCount) * Math.PI * 2
-        const dist = 30
+        const dist = 40
+        const color = i % 2 === 0 ? '#ffd700' : '#4caf50'
         return (
           <circle
             key={i}
             cx={center.x}
             cy={center.y}
-            r={3}
-            fill="#ffd700"
+            r={4}
+            fill={color}
             opacity="0"
           >
             <animate
               attributeName="cx"
               from={`${center.x}`}
               to={`${center.x + Math.cos(angle) * dist}`}
-              dur="0.6s"
+              dur="0.8s"
               fill="freeze"
             />
             <animate
               attributeName="cy"
               from={`${center.y}`}
               to={`${center.y + Math.sin(angle) * dist}`}
-              dur="0.6s"
+              dur="0.8s"
               fill="freeze"
             />
             <animate
               attributeName="opacity"
               from="1"
               to="0"
-              dur="0.6s"
+              dur="0.8s"
               fill="freeze"
             />
             <animate
               attributeName="r"
-              from="3"
+              from="4"
               to="1"
-              dur="0.6s"
+              dur="0.8s"
               fill="freeze"
             />
           </circle>

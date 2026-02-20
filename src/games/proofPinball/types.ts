@@ -20,11 +20,9 @@ export interface Reflector {
   halfLength: number
 }
 
-export interface Target {
-  id: string
+export interface GoalZone {
   center: Vec2
   radius: number
-  hit: boolean
 }
 
 export interface BounceInfo {
@@ -46,8 +44,12 @@ export interface BallPath {
   points: Vec2[]
   /** Bounce angle info for each wall collision */
   bounces: BounceInfo[]
-  /** Which targets were hit (by id), in order */
-  targetsHit: string[]
+  /** Whether ball entered the goal zone (after min bounces met) */
+  goalReached: boolean
+  /** Index of the point where the goal was reached (for animation) */
+  goalReachedAtPoint: number
+  /** Energy at each point along the path (0-1 scale, index matches points) */
+  energyAtPoints: number[]
 }
 
 export interface LevelConfig {
@@ -56,8 +58,8 @@ export interface LevelConfig {
   subtitle: string
   /** Walls forming the room boundary */
   walls: Wall[]
-  /** Target zones to hit */
-  targets: Target[]
+  /** Goal zone to reach */
+  goalZone: GoalZone
   /** Moveable reflectors (empty for early levels) */
   reflectors: Reflector[]
   /** Ball launch position */
@@ -70,9 +72,9 @@ export interface LevelConfig {
   predictionBounces: number
   /** Tutorial hint text (null if none) */
   hint: string | null
-  /** Maximum bounces before ball fades */
+  /** Safety cap on bounces to prevent infinite loops */
   maxBounces: number
-  /** Minimum bounces required before a target hit counts (0 = no requirement) */
+  /** Minimum bounces required before goal zone counts (0 = no requirement) */
   minBounces: number
 }
 
@@ -87,14 +89,18 @@ export interface GameState {
   aimAngle: number
   /** Whether the player is currently dragging to aim */
   isAiming: boolean
+  /** Launch power (0-1 range, maps to speed 200-600 px/s) */
+  launchPower: number
   /** Ball path from the current/last shot */
   currentPath: BallPath | null
   /** Ball animation progress (0 = start, 1 = end of path) */
   animationProgress: number
+  /** Current ball energy (0-1 scale, shown during animation) */
+  currentEnergy: number
   /** Number of shots taken this level */
   shotsTaken: number
-  /** Targets status (mirrors level targets but tracks hit state) */
-  targets: Target[]
+  /** Whether the goal has been reached this shot */
+  goalReached: boolean
   /** Reflectors (may differ from level defaults if user moved them) */
   reflectors: Reflector[]
   /** Stars earned this level (0-3) */
@@ -108,12 +114,13 @@ export interface GameState {
 export type GameAction =
   | { type: 'START_AIM' }
   | { type: 'SET_AIM_ANGLE'; angle: number }
+  | { type: 'SET_LAUNCH_POWER'; power: number }
   | { type: 'FIRE_SHOT'; path: BallPath }
-  | { type: 'UPDATE_ANIMATION'; progress: number }
+  | { type: 'UPDATE_ANIMATION'; progress: number; energy: number }
+  | { type: 'GOAL_REACHED' }
   | { type: 'SHOT_COMPLETE' }
   | { type: 'RESET_LEVEL' }
   | { type: 'SELECT_LEVEL'; levelId: number }
   | { type: 'GO_TO_LEVEL_SELECT' }
   | { type: 'SELECT_REFLECTOR'; id: string | null }
   | { type: 'ROTATE_REFLECTOR'; id: string; angle: number }
-  | { type: 'HIT_TARGET'; targetId: string }

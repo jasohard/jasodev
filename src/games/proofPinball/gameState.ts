@@ -2,12 +2,8 @@
  * Game state reducer for Proof Pinball.
  */
 
-import type { GameState, GameAction, Target } from './types'
+import type { GameState, GameAction } from './types'
 import { LEVELS } from './levels'
-
-function resetTargets(targets: Target[]): Target[] {
-  return targets.map((t) => ({ ...t, hit: false }))
-}
 
 function calculateStars(shotsTaken: number, parShots: number, maxShots: number): number {
   if (shotsTaken <= parShots) return 3
@@ -22,10 +18,12 @@ export function initializeLevel(levelId: number, levelStars: Record<number, numb
     phase: 'aiming',
     aimAngle: 45,
     isAiming: false,
+    launchPower: 0.5,
     currentPath: null,
     animationProgress: 0,
+    currentEnergy: 1.0,
     shotsTaken: 0,
-    targets: resetTargets(level.targets),
+    goalReached: false,
     reflectors: level.reflectors.map((r) => ({ ...r })),
     stars: 0,
     levelStars,
@@ -42,6 +40,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'SET_AIM_ANGLE':
       return { ...state, aimAngle: action.angle }
 
+    case 'SET_LAUNCH_POWER':
+      return { ...state, launchPower: Math.max(0, Math.min(1, action.power)) }
+
     case 'FIRE_SHOT':
       if (state.phase !== 'aiming') return state
       return {
@@ -50,22 +51,19 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         isAiming: false,
         currentPath: action.path,
         animationProgress: 0,
+        currentEnergy: 1.0,
         shotsTaken: state.shotsTaken + 1,
+        goalReached: false,
       }
 
     case 'UPDATE_ANIMATION':
-      return { ...state, animationProgress: action.progress }
+      return { ...state, animationProgress: action.progress, currentEnergy: action.energy }
 
-    case 'HIT_TARGET': {
-      const newTargets = state.targets.map((t) =>
-        t.id === action.targetId ? { ...t, hit: true } : t
-      )
-      return { ...state, targets: newTargets }
-    }
+    case 'GOAL_REACHED':
+      return { ...state, goalReached: true }
 
     case 'SHOT_COMPLETE': {
-      const allHit = state.targets.every((t) => t.hit)
-      if (allHit) {
+      if (state.goalReached) {
         const stars = calculateStars(state.shotsTaken, state.level.parShots, state.level.maxShots)
         const newLevelStars = { ...state.levelStars }
         const existing = newLevelStars[state.level.id] ?? 0
@@ -77,7 +75,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           levelStars: newLevelStars,
         }
       }
-      // If not all targets hit, check if out of shots
+      // If goal not reached, check if out of shots
       if (state.shotsTaken >= state.level.maxShots) {
         return {
           ...state,

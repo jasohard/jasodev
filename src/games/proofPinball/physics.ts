@@ -2,10 +2,21 @@
  * Physics engine for Proof Pinball.
  *
  * Handles line-segment intersection, reflection vectors,
- * and full ball-path computation through a room of walls.
+ * energy-based ball physics, and full ball-path computation through a room of walls.
  */
 
-import type { Vec2, Wall, BounceInfo, BallPath, Target, Reflector } from './types'
+import type { Vec2, Wall, BounceInfo, BallPath, GoalZone, Reflector } from './types'
+
+// ── Constants ────────────────────────────────────────────
+
+/** Energy retained per bounce (80%) */
+export const ENERGY_RETENTION = 0.8
+/** Ball stops when energy drops below this threshold */
+export const ENERGY_STOP_THRESHOLD = 0.10
+/** Min launch speed (px/s in viewBox units) */
+export const MIN_SPEED = 200
+/** Max launch speed (px/s in viewBox units) */
+export const MAX_SPEED = 600
 
 // ── Vector helpers ────────────────────────────────────────
 
@@ -55,6 +66,11 @@ export function radToDeg(rad: number): number {
 export function directionFromAngle(angleDeg: number): Vec2 {
   const rad = degToRad(angleDeg)
   return { x: Math.cos(rad), y: -Math.sin(rad) } // negative y because SVG y is flipped
+}
+
+/** Map power (0-1) to speed (MIN_SPEED - MAX_SPEED) */
+export function powerToSpeed(power: number): number {
+  return MIN_SPEED + power * (MAX_SPEED - MIN_SPEED)
 }
 
 // ── Geometry ──────────────────────────────────────────────
@@ -140,33 +156,59 @@ export function reflectorToWall(ref: Reflector): Wall {
 const EPSILON = 0.01 // small offset to prevent re-intersection with the same wall
 
 /**
- * Compute the full ball path through a room.
- * Returns the path (all points) and bounce info at each wall collision.
- * minBounces: minimum bounces required before a target hit counts.
+ * Check if a point is within `radius` distance of a line segment.
+ */
+function pointNearSegment(point: Vec2, segStart: Vec2, segEnd: Vec2, radius: number): boolean {
+  const seg = sub(segEnd, segStart)
+  const segLen = length(seg)
+  if (segLen < 1e-10) return distance(point, segStart) <= radius
+
+  const t = Math.max(0, Math.min(1, dot(sub(point, segStart), seg) / (segLen * segLen)))
+  const projection = add(segStart, scale(seg, t))
+  return distance(point, projection) <= radius
+}
+
+/**
+ * Check if a line segment passes through a circle.
+ * Returns true if any part of the segment is within the circle.
+ */
+function segmentIntersectsCircle(segStart: Vec2, segEnd: Vec2, center: Vec2, radius: number): boolean {
+  return pointNearSegment(center, segStart, segEnd, radius)
+}
+
+/**
+ * Compute the full ball path through a room with energy-based physics.
+ * Ball starts with energy = 1.0, loses ENERGY_RETENTION per bounce.
+ * Ball stops when energy < ENERGY_STOP_THRESHOLD.
+ *
+ * Returns the path (all points), bounce info, goal detection, and energy at each point.
  */
 export function computeBallPath(
   startPos: Vec2,
   angleDeg: number,
   walls: Wall[],
   reflectors: Reflector[],
-  targets: Target[],
+  goalZone: GoalZone,
   maxBounces: number,
-  minBounces: number = 0
+  minBounces: number = 0,
+  initialPower: number = 1.0
 ): BallPath {
   const allWalls = [...walls, ...reflectors.map(reflectorToWall)]
   const points: Vec2[] = [startPos]
   const bounces: BounceInfo[] = []
-  const targetsHit: string[] = []
-  const hitTargetSet = new Set<string>()
+  const energyAtPoints: number[] = [1.0] // Start with full energy
+  let goalReached = false
+  let goalReachedAtPoint = -1
 
   let pos = { ...startPos }
   let dir = directionFromAngle(angleDeg)
   let bounceCount = 0
+  let energy = 1.0
 
   // Maximum path length to prevent infinite loops
   const MAX_PATH_LENGTH = 5000
 
-  while (bounceCount < maxBounces) {
+  while (bounceCount < maxBounces && energy >= ENERGY_STOP_THRESHOLD) {
     // Cast a ray from pos in direction dir, find nearest wall intersection
     const rayEnd = add(pos, scale(dir, MAX_PATH_LENGTH))
 
@@ -186,21 +228,16 @@ export function computeBallPath(
 
     if (!nearest) {
       // Ball escapes the room (shouldn't happen in well-designed levels)
-      // Add a point far along the direction and stop
       points.push(add(pos, scale(dir, 300)))
+      energyAtPoints.push(energy)
       break
     }
 
-    // Check if ball passes through any target zones on this segment
-    // Only count hits if we've met the minimum bounce requirement
-    for (const target of targets) {
-      if (hitTargetSet.has(target.id)) continue
-      if (pointNearSegment(target.center, pos, nearest.point, target.radius)) {
-        if (bounceCount >= minBounces) {
-          hitTargetSet.add(target.id)
-          targetsHit.push(target.id)
-        }
-        // If bounceCount < minBounces, the ball passes through but doesn't count
+    // Check if ball passes through goal zone on this segment
+    if (!goalReached && bounceCount >= minBounces) {
+      if (segmentIntersectsCircle(pos, nearest.point, goalZone.center, goalZone.radius)) {
+        goalReached = true
+        goalReachedAtPoint = points.length // Will be the index of the bounce point
       }
     }
 
@@ -224,32 +261,27 @@ export function computeBallPath(
       outgoing: normalize(reflected),
     })
 
+    // Reduce energy on bounce
+    energy *= ENERGY_RETENTION
+    energyAtPoints.push(energy)
+
     // Move slightly away from the wall to prevent re-intersection
     pos = add(hitPoint, scale(normalize(reflected), EPSILON))
     dir = normalize(reflected)
     bounceCount++
 
+    // If energy is depleted, stop the ball
+    if (energy < ENERGY_STOP_THRESHOLD) {
+      break
+    }
   }
 
-  return { points, bounces, targetsHit }
-}
-
-/**
- * Check if a point is within `radius` distance of a line segment.
- */
-function pointNearSegment(point: Vec2, segStart: Vec2, segEnd: Vec2, radius: number): boolean {
-  const seg = sub(segEnd, segStart)
-  const segLen = length(seg)
-  if (segLen < 1e-10) return distance(point, segStart) <= radius
-
-  const t = Math.max(0, Math.min(1, dot(sub(point, segStart), seg) / (segLen * segLen)))
-  const projection = add(segStart, scale(seg, t))
-  return distance(point, projection) <= radius
+  return { points, bounces, goalReached, goalReachedAtPoint, energyAtPoints }
 }
 
 /**
  * Compute a prediction path (for aiming visualization).
- * Same as computeBallPath but limited to fewer bounces.
+ * Same as computeBallPath but limited to fewer bounces and no goal detection.
  */
 export function computePredictionPath(
   startPos: Vec2,
@@ -347,4 +379,33 @@ export function pathLength(points: Vec2[]): number {
     total += distance(points[i - 1], points[i])
   }
   return total
+}
+
+/**
+ * Get the energy at a given fraction of the path.
+ * Linearly interpolates between energy values at points.
+ */
+export function getEnergyAtFraction(energyAtPoints: number[], points: Vec2[], fraction: number): number {
+  if (energyAtPoints.length === 0) return 0
+  if (fraction <= 0) return energyAtPoints[0]
+  if (fraction >= 1) return energyAtPoints[energyAtPoints.length - 1]
+
+  const totalLen = pathLength(points)
+  if (totalLen === 0) return energyAtPoints[0]
+
+  const targetDist = fraction * totalLen
+  let accumulated = 0
+
+  for (let i = 1; i < points.length; i++) {
+    const segLen = distance(points[i - 1], points[i])
+    if (accumulated + segLen >= targetDist) {
+      const segFrac = segLen > 0 ? (targetDist - accumulated) / segLen : 0
+      const e0 = energyAtPoints[i - 1] ?? 1
+      const e1 = energyAtPoints[i] ?? 0
+      return e0 + (e1 - e0) * segFrac
+    }
+    accumulated += segLen
+  }
+
+  return energyAtPoints[energyAtPoints.length - 1]
 }

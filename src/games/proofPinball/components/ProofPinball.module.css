@@ -5,7 +5,7 @@
   flex-direction: column;
   min-height: calc(100vh - var(--nav-height));
   min-height: calc(100dvh - var(--nav-height));
-  background: #1a1a2e;
+  background: #0d1117;
   color: var(--color-text);
   overflow: hidden;
   user-select: none;
@@ -183,13 +183,19 @@
 .controls {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-md);
   padding-bottom: max(var(--space-md), env(safe-area-inset-bottom));
   background: rgba(0, 0, 0, 0.3);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
+}
+
+.controlsCenter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
 }
 
 .controlButton {
@@ -226,7 +232,23 @@
   font-size: 0.9rem;
   font-weight: 600;
   color: #00bcd4;
-  min-width: 70px;
+  min-width: 50px;
+  text-align: center;
+}
+
+.powerDisplay {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 40px;
+  text-align: center;
+}
+
+.energyDisplay {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 40px;
   text-align: center;
 }
 
@@ -239,7 +261,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-lg);
-  background: rgba(26, 26, 46, 0.92);
+  background: rgba(13, 17, 23, 0.92);
   z-index: 10;
   animation: fadeIn 0.3s ease;
 }
