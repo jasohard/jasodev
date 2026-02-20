@@ -12,8 +12,8 @@ import type { Vec2, Gem, TargetZone, Particle } from './types'
 
 export const BOARD_WIDTH = 600
 export const BOARD_HEIGHT = 320
-export const BASE_SPEED = 30   // px/s per unit slope
-export const MIN_SPEED = 5     // px/s minimum
+export const BASE_SPEED = 80   // px/s per unit slope
+export const MIN_SPEED = 25    // px/s minimum — never feels stuck
 export const GEM_RADIUS = 18   // collection radius (generous for game feel)
 export const DERIV_H = 0.5     // central difference step
 export const CURVE_SAMPLES = 200
