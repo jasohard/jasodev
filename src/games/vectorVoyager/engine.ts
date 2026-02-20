@@ -83,7 +83,8 @@ function computeGravAccel(px: number, py: number, wells: GravityWell[]): Vec2 {
     const dist = Math.sqrt(distSq)
     const clampedDist = Math.max(dist, MIN_DIST)
     const force = G * well.strength / (clampedDist * clampedDist)
-    const norm = dist > 0 ? 1 / dist : 0
+    // Use clampedDist for normalization to prevent NaN when dist=0
+    const norm = 1 / clampedDist
     ax += dx * norm * force
     ay += dy * norm * force
   }
@@ -140,10 +141,12 @@ export function simulateTrajectory(
     }
 
     // Check asteroid collision (line segment from prev to current)
-    const prev = path[path.length - 2]
-    for (const ast of asteroids) {
-      if (segmentCircleHit(prev, { x: px, y: py }, { x: ast.cx, y: ast.cy }, ast.r + SHIP_RADIUS)) {
-        return { path, reachedTarget: false, hitAsteroid: true, endIdx: path.length - 1 }
+    if (path.length >= 2) {
+      const prev = path[path.length - 2]
+      for (const ast of asteroids) {
+        if (segmentCircleHit(prev, { x: px, y: py }, { x: ast.cx, y: ast.cy }, ast.r + SHIP_RADIUS)) {
+          return { path, reachedTarget: false, hitAsteroid: true, endIdx: path.length - 1 }
+        }
       }
     }
 

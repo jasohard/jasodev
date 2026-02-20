@@ -99,11 +99,11 @@ export default function VectorVoyager() {
     (e: React.PointerEvent) => {
       if (phase !== 'planning') return
 
-      const targetEl = e.target as Element | null
+      const targetEl = e.target as Element
       if (!targetEl) return
-      const svg = targetEl.closest?.('svg') as SVGSVGElement | null
+      const svg = targetEl.closest('svg') as SVGSVGElement | null
       if (svg) svgRef.current = svg
-      ;(targetEl as Element).setPointerCapture?.(e.pointerId)
+      targetEl.setPointerCapture?.(e.pointerId)
 
       const pt = pointerToSVG(e)
 
@@ -215,6 +215,9 @@ export default function VectorVoyager() {
   const handleLaunch = useCallback(() => {
     if (!launch || !hasLaunch) return
 
+    // Cancel any running animation first
+    cancelAnimationFrame(animFrameRef.current)
+
     const sim = simulateTrajectory(
       launch, wells, level.asteroids, level.target, level.targetRadius
     )
@@ -227,7 +230,7 @@ export default function VectorVoyager() {
 
     const path = sim.path
     const totalSteps = sim.endIdx
-    if (totalSteps <= 0) {
+    if (totalSteps <= 0 || path.length === 0) {
       setPhase('missed')
       return
     }

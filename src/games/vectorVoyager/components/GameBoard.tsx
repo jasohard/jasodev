@@ -143,7 +143,8 @@ export default function GameBoard({
       )}
 
       {/* Collision/success marker on preview */}
-      {isPlanning && trajectoryPreview && trajectoryPreview.hitAsteroid && (
+      {isPlanning && trajectoryPreview && trajectoryPreview.hitAsteroid &&
+        trajectoryPreview.endIdx >= 0 && trajectoryPreview.endIdx < trajectoryPreview.path.length && (
         <g>
           <circle
             cx={trajectoryPreview.path[trajectoryPreview.endIdx].x}
