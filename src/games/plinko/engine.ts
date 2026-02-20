@@ -19,18 +19,18 @@ export const PEG_ZONE_TOP = 60
 export const PEG_ZONE_BOTTOM = 490
 
 // ─── Physics constants ───────────────────────────────────────────
-const GRAVITY = 500 // px/s^2
+const GRAVITY = 350 // px/s^2 — slower fall
 const BALL_RADIUS = 4
 const DEFAULT_PEG_RADIUS = 9
 const BUMPER_PEG_RADIUS = 14
-const RESTITUTION = 0.5 // moderate bounce — lively but not wild
-const BUMPER_RESTITUTION = 0.75
-const WALL_RESTITUTION = 0.35
-const RANDOM_DEFLECTION = 0.12 // radians (~6.9°)
-const MAX_BALL_SPEED = 600
-const BALL_TIMEOUT = 12 // seconds
+const RESTITUTION = 0.42 // between liquid (0.35) and bouncy (0.50)
+const BUMPER_RESTITUTION = 0.70
+const WALL_RESTITUTION = 0.30
+const RANDOM_DEFLECTION = 0.10 // radians (~5.7°)
+const MAX_BALL_SPEED = 450
+const BALL_TIMEOUT = 15 // seconds — more time at slower speed
 const MIN_PEG_DISTANCE = 22 // minimum distance between peg centers
-const FRICTION = 0.996 // light air friction
+const FRICTION = 0.994 // moderate air friction
 
 // ─── Ball creation ───────────────────────────────────────────────
 
@@ -39,9 +39,9 @@ let ballIdCounter = 0
 export function createBall(dropX: number): Ball {
   return {
     id: ballIdCounter++,
-    x: dropX + (Math.random() - 0.5) * 5, // ±2.5px random offset
+    x: dropX + (Math.random() - 0.5) * 4, // ±2px random offset
     y: DROP_Y,
-    vx: (Math.random() - 0.5) * 14, // ±7px/s initial spread
+    vx: (Math.random() - 0.5) * 10, // ±5px/s initial spread
     vy: 0,
     radius: BALL_RADIUS,
     active: true,
