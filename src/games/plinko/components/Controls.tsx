@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import styles from './Controls.module.css'
 
 interface ControlsProps {
@@ -33,6 +34,22 @@ export default function Controls({
     return 1
   }
 
+  // Keyboard shortcuts: Space to drop, R to reset
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (e.code === 'Space') {
+        e.preventDefault()
+        onDrop()
+      } else if (e.code === 'KeyR' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        onReset()
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [onDrop, onReset])
+
   return (
     <div className={styles.controls}>
       <div className={styles.row}>
@@ -48,9 +65,8 @@ export default function Controls({
 
         {/* DROP button - big and prominent */}
         <button
-          className={styles.dropBtn}
+          className={`${styles.dropBtn} ${isDropping ? styles.dropping : ''}`}
           onClick={onDrop}
-          disabled={isDropping}
           aria-label={`Drop ${dropCount} balls`}
         >
           <svg viewBox="0 0 24 24" width={20} height={20} className={styles.dropIcon}>
