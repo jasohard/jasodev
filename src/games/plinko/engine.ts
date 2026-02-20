@@ -1,6 +1,16 @@
 /**
  * Plinko game engine — handles board layout, ball path computation,
  * histogram scoring, and all game logic.
+ *
+ * The board uses a standard Galton board layout:
+ * - Even rows (0, 2, 4...) are "wide" rows with more pegs
+ * - Odd rows (1, 3, 5...) are "narrow" rows, offset by half a peg-spacing
+ *
+ * When a ball hits a peg, it goes LEFT (same column in next row) or RIGHT
+ * (column+1 in next row for wide→narrow) / (same or +1 for narrow→wide).
+ *
+ * The ball's position between pegs is tracked by which "gap" it falls into.
+ * After the last row, the gap maps directly to a bin.
  */
 import type { Peg, PegPosition, BallPath, LevelConfig } from './types'
 
@@ -14,41 +24,13 @@ export const BOARD_PADDING_TOP = 50
 export const BOARD_PADDING_BOTTOM = 130
 export const PEG_RADIUS = 8
 
-/** Compute the (x, y) center of a peg given its row/col and total row count */
-export function pegPosition(row: number, col: number, totalRows: number): PegPosition {
-  const pegsInRow = row % 2 === 0 ? Math.ceil((totalRows + 1) / 2) + (totalRows % 2 === 0 ? 1 : 0) : Math.floor((totalRows + 1) / 2) + (totalRows % 2 === 0 ? 0 : 0)
-
-  // Simpler: for a triangular Plinko layout
-  // Even rows have (totalRows/2 + 1) pegs, odd rows have (totalRows/2) pegs
-  // But the spec says alternating rows: 5 pegs, 4 pegs, 5 pegs, 4 pegs...
-  // Let's use a simpler approach: first row has N pegs, second has N-1, alternating
-  const maxPegsInRow = getRowPegCount(row, totalRows)
-  const maxPegsAnyRow = getRowPegCount(0, totalRows)
-
-  const usableWidth = BOARD_WIDTH - BOARD_PADDING_X * 2
-  const usableHeight = BOARD_HEIGHT - BOARD_PADDING_TOP - BOARD_PADDING_BOTTOM
-
-  // Spacing between pegs in widest row
-  const hSpacing = usableWidth / (maxPegsAnyRow - 1 || 1)
-  const vSpacing = usableHeight / (totalRows - 1 || 1)
-
-  // Offset for rows with fewer pegs (centered)
-  const rowOffset = ((maxPegsAnyRow - maxPegsInRow) * hSpacing) / 2
-
-  return {
-    x: BOARD_PADDING_X + rowOffset + col * hSpacing,
-    y: BOARD_PADDING_TOP + row * vSpacing,
-  }
-}
-
-/** Get number of pegs in a given row. Even rows wider, odd rows narrower. */
+/** Get number of pegs in a given row. Even rows are wider. */
 export function getRowPegCount(row: number, totalRows: number): number {
-  // Use a simple pattern: base count derived from total rows
-  // For 3 rows: 3, 2, 3 → bins = 4
-  // For 4 rows: 4, 3, 4, 3 → bins = 5
-  // For 5 rows: 4, 3, 4, 3, 4 → bins = 5
-  // For 6 rows: 5, 4, 5, 4, 5, 4 → bins = 6
-  // For 7 rows: 5, 4, 5, 4, 5, 4, 5 → bins = 6
+  // Wide rows have one more peg than narrow rows.
+  // Pattern for N total rows: wide = ceil(N/2)+1, narrow = ceil(N/2)
+  // e.g. 3 rows → 3,2,3 (bins=4), 4 rows → 4,3,4,3 (bins=5)
+  // 5 rows → 4,3,4,3,4 (bins=5), 6 rows → 5,4,5,4,5,4 (bins=6)
+  // 7 rows → 5,4,5,4,5,4,5 (bins=6)
   const widePegs = Math.ceil(totalRows / 2) + 1
   const narrowPegs = widePegs - 1
   return row % 2 === 0 ? widePegs : narrowPegs
@@ -56,7 +38,29 @@ export function getRowPegCount(row: number, totalRows: number): number {
 
 /** Get the number of bins for a given row count */
 export function getBinCount(totalRows: number): number {
+  // Bins = wide row peg count + 1
   return getRowPegCount(0, totalRows) + 1
+}
+
+/** Compute the (x, y) center of a peg given its row/col and total row count */
+export function pegPosition(row: number, col: number, totalRows: number): PegPosition {
+  const pegsInRow = getRowPegCount(row, totalRows)
+  const maxPegs = getRowPegCount(0, totalRows)
+
+  const usableWidth = BOARD_WIDTH - BOARD_PADDING_X * 2
+  const usableHeight = BOARD_HEIGHT - BOARD_PADDING_TOP - BOARD_PADDING_BOTTOM
+
+  // Spacing between pegs in widest row
+  const hSpacing = maxPegs > 1 ? usableWidth / (maxPegs - 1) : usableWidth
+  const vSpacing = totalRows > 1 ? usableHeight / (totalRows - 1) : usableHeight
+
+  // Offset for rows with fewer pegs (centered)
+  const rowOffset = ((maxPegs - pegsInRow) * hSpacing) / 2
+
+  return {
+    x: BOARD_PADDING_X + rowOffset + col * hSpacing,
+    y: BOARD_PADDING_TOP + row * vSpacing,
+  }
 }
 
 // ─── Peg initialization ──────────────────────────────────────────
@@ -83,74 +87,89 @@ export function createPegs(level: LevelConfig): Peg[][] {
 // ─── Ball path computation ───────────────────────────────────────
 
 /**
- * Pre-compute a ball's path from top to bottom.
- * At each peg, the ball goes left or right based on that peg's probability.
- * Returns the path as a series of points and the final bin index.
+ * Pre-compute a ball's path through the Galton board.
+ *
+ * We model the ball as falling through "gaps" between pegs. The ball
+ * enters from the top-center gap, hits a peg, and falls into either
+ * the left or right child gap. We track which peg the ball hits at
+ * each row, determine left/right based on that peg's probability,
+ * and eventually the ball lands in a bin.
+ *
+ * For a standard Galton board:
+ * - Wide row peg at col C, if ball goes left → hits narrow row peg at col C-1 (if exists)
+ *   If ball goes right → hits narrow row peg at col C (if exists)
+ * - Narrow row peg at col C, if ball goes left → hits wide row peg at col C
+ *   If ball goes right → hits wide row peg at col C+1
+ *
+ * But we simplify: we track the ball's "gap index" — which gap between pegs
+ * the ball occupies after bouncing. Then at the next row, the ball hits the
+ * peg that's directly below (or to the left/right of) that gap.
+ *
+ * Actually, let's use the simplest correct model:
+ * Track which peg the ball hits at each row. The ball drops from above
+ * and hits the center peg of row 0. After left/right decision, it
+ * hits the appropriate peg in the next row based on the staggered layout.
  */
 export function computeBallPath(pegs: Peg[][], totalRows: number): BallPath {
   const points: { x: number; y: number }[] = []
   const binCount = getBinCount(totalRows)
 
-  // Start position: top-center with slight randomness
+  // Start position: top-center
   const startX = BOARD_WIDTH / 2 + (Math.random() - 0.5) * 4
-  const startY = BOARD_PADDING_TOP - 30
+  const startY = BOARD_PADDING_TOP - 25
   points.push({ x: startX, y: startY })
 
-  // Track the ball's horizontal position conceptually
-  // We use a "slot" system: the ball starts in the center and drifts left/right
-  let currentSlot = 0 // represents cumulative drift: negative = left, positive = right
+  // Track ball position by "column offset from left" using a half-step grid.
+  // In the widest row, pegs are at positions 0, 1, 2, ..., (W-1).
+  // In the narrow row, pegs are at positions 0.5, 1.5, ..., (W-1.5).
+  // We track the ball's position in terms of "widest row column".
+  // Ball starts directly above the center peg of row 0.
+  const wideCount = getRowPegCount(0, totalRows)
+  let ballPos = (wideCount - 1) / 2 // center position
 
   for (let row = 0; row < totalRows; row++) {
-    const pegCount = getRowPegCount(row, totalRows)
+    const isWide = row % 2 === 0
+    const pegsInRow = getRowPegCount(row, totalRows)
 
-    // Determine which peg the ball interacts with
-    // For even rows (wide): peg index = center + drift
-    // For odd rows (narrow): peg index = center + drift (adjusted)
+    // Convert ballPos to the nearest peg in this row
     let pegCol: number
-
-    if (row === 0) {
-      // First row: ball hits the center peg
-      pegCol = Math.floor(pegCount / 2)
+    if (isWide) {
+      // Wide row: pegs at integer positions 0, 1, ..., pegsInRow-1
+      pegCol = Math.round(ballPos)
     } else {
-      // Subsequent rows: based on accumulated drift
-      const prevRowWide = (row - 1) % 2 === 0
-      const thisRowWide = row % 2 === 0
-
-      if (prevRowWide && !thisRowWide) {
-        // Going from wide to narrow: col stays same or adjusts
-        pegCol = Math.floor(pegCount / 2) + currentSlot
-      } else if (!prevRowWide && thisRowWide) {
-        // Going from narrow to wide
-        pegCol = Math.floor(pegCount / 2) + currentSlot
-      } else {
-        pegCol = Math.floor(pegCount / 2) + currentSlot
-      }
+      // Narrow row: pegs at positions 0.5, 1.5, ..., pegsInRow-0.5
+      // These correspond to wide positions shifted by 0.5
+      pegCol = Math.round(ballPos - 0.5)
     }
-
-    // Clamp to valid range
-    pegCol = Math.max(0, Math.min(pegCount - 1, pegCol))
+    pegCol = Math.max(0, Math.min(pegsInRow - 1, pegCol))
 
     const peg = pegs[row][pegCol]
     const pos = pegPosition(row, pegCol, totalRows)
 
-    // Add point at peg (with slight offset for visual interest)
+    // Add waypoint with slight randomness for natural look
+    const jitterX = (Math.random() - 0.5) * 4
+    const jitterY = (Math.random() - 0.5) * 2
     points.push({
-      x: pos.x + (Math.random() - 0.5) * 3,
-      y: pos.y + PEG_RADIUS + 2,
+      x: pos.x + jitterX,
+      y: pos.y + PEG_RADIUS + 2 + jitterY,
     })
 
-    // Decide left or right
+    // Determine actual position of this peg in the wide-row coordinate system
+    const pegPosInWide = isWide ? pegCol : pegCol + 0.5
+
+    // Ball goes left or right
     const goLeft = Math.random() < peg.leftProb
     if (goLeft) {
-      currentSlot--
+      ballPos = pegPosInWide - 0.5
     } else {
-      currentSlot++
+      ballPos = pegPosInWide + 0.5
     }
   }
 
-  // Calculate bin index from final drift
-  const centerBin = Math.floor(binCount / 2)
-  let binIndex = centerBin + currentSlot
+  // After the last row, ballPos is in wide-row coords.
+  // Map to bin index. Bins go from -0.5 to wideCount-0.5 in wide coords.
+  // Bin 0 = below left of peg 0, Bin 1 = between peg 0 and peg 1, etc.
+  let binIndex = Math.round(ballPos)
   binIndex = Math.max(0, Math.min(binCount - 1, binIndex))
 
   // Final position: center of the bin
@@ -158,6 +177,12 @@ export function computeBallPath(pegs: Peg[][], totalRows: number): BallPath {
   const binCenterX = BOARD_PADDING_X + binIndex * binWidth + binWidth / 2
   const binY = BOARD_HEIGHT - BOARD_PADDING_BOTTOM + 20
 
+  // Add a transition point between last peg and bin
+  const lastPeg = points[points.length - 1]
+  points.push({
+    x: (lastPeg.x + binCenterX) / 2 + (Math.random() - 0.5) * 6,
+    y: (lastPeg.y + binY) / 2,
+  })
   points.push({ x: binCenterX, y: binY })
 
   return { points, binIndex }
@@ -167,8 +192,8 @@ export function computeBallPath(pegs: Peg[][], totalRows: number): BallPath {
 
 /**
  * Compute match percentage between player's histogram and target distribution.
- * Uses a normalized absolute difference metric (more intuitive than chi-squared
- * for students).
+ * Uses a normalized absolute difference metric (simpler and more intuitive
+ * than chi-squared for students).
  *
  * Returns 0-100.
  */

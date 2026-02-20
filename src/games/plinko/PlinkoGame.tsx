@@ -25,7 +25,7 @@ export default function PlinkoGame() {
   const binCount = getBinCount(level.rows)
 
   const [pegs, setPegs] = useState<Peg[][]>(() => createPegs(level))
-  const [bins, setBins] = useState<number[]>(() => Array(binCount).fill(0))
+  const [bins, setBins] = useState<number[]>(() => Array(binCount).fill(0) as number[])
   const [totalBalls, setTotalBalls] = useState(0)
   const [selectedPeg, setSelectedPeg] = useState<{
     row: number
@@ -37,13 +37,22 @@ export default function PlinkoGame() {
   const [isDropping, setIsDropping] = useState(false)
 
   const matchPercent = computeMatchPercent(bins, level.targetDistribution)
-  const stars = level.isTutorial && totalBalls >= 20
-    ? 3 as const
-    : computeStars(matchPercent, level)
+  const stars =
+    level.isTutorial && totalBalls >= 20
+      ? (3 as const)
+      : computeStars(matchPercent, level)
   const stats = computeStats(bins)
 
+  // Use refs for animation state to avoid stale closures
   const animFrameRef = useRef<number>(0)
   const ballsRef = useRef<ActiveBall[]>([])
+  const speedRef = useRef(speed)
+  const isAnimatingRef = useRef(false)
+
+  // Keep speedRef in sync
+  useEffect(() => {
+    speedRef.current = speed
+  }, [speed])
 
   // Update best stars when stars change
   useEffect(() => {
@@ -63,27 +72,34 @@ export default function PlinkoGame() {
     }
   }, [level.id])
 
-  // Animation loop
-  const animate = useCallback(() => {
-    const speedFactor = speed === 1 ? 0.012 : speed === 3 ? 0.035 : 0.08
-    let hasActive = false
+  // The core animation loop — reads from refs, not state
+  const animationLoop = useCallback(() => {
+    const s = speedRef.current
+    const speedFactor = s === 1 ? 0.015 : s === 3 ? 0.04 : 0.09
     const completed: ActiveBall[] = []
+    let hasActive = false
 
     const updated = ballsRef.current.map((ball) => {
       if (ball.progress >= 1) return ball
 
-      const newProgress = Math.min(1, ball.progress + speedFactor)
-      hasActive = newProgress < 1
+      // Stagger: don't start animating until the stagger delay is reached
+      if (ball.progress < 0) {
+        const newProgress = ball.progress + speedFactor
+        return { ...ball, progress: Math.min(0, newProgress) }
+      }
 
-      if (newProgress >= 1) {
-        completed.push(ball)
+      const newProgress = Math.min(1, ball.progress + speedFactor)
+      if (newProgress < 1) {
+        hasActive = true
+      } else {
+        completed.push({ ...ball, progress: 1 })
       }
 
       return { ...ball, progress: newProgress }
     })
 
     ballsRef.current = updated
-    setActiveBalls([...updated])
+    setActiveBalls([...updated.filter((b) => b.progress > 0)])
 
     // Update bins for completed balls
     if (completed.length > 0) {
@@ -99,78 +115,80 @@ export default function PlinkoGame() {
       })
       setTotalBalls((prev) => prev + completed.length)
 
-      // Clean up completed balls after a short delay
-      setTimeout(() => {
-        ballsRef.current = ballsRef.current.filter((b) => b.progress < 1)
-        setActiveBalls((prev) => prev.filter((b) => b.progress < 1))
-      }, 200)
+      // Remove completed balls
+      ballsRef.current = ballsRef.current.filter((b) => b.progress < 1)
     }
 
-    if (hasActive || ballsRef.current.some((b) => b.progress < 1)) {
-      animFrameRef.current = requestAnimationFrame(animate)
+    // Check if any balls still have negative (staggered) or active progress
+    const anyRemaining = ballsRef.current.some((b) => b.progress < 1)
+
+    if (hasActive || anyRemaining) {
+      animFrameRef.current = requestAnimationFrame(animationLoop)
     } else {
+      isAnimatingRef.current = false
       setIsDropping(false)
+      setActiveBalls([])
     }
-  }, [speed])
+  }, [])
+
+  // Start the animation loop if it's not already running
+  const ensureAnimating = useCallback(() => {
+    if (!isAnimatingRef.current) {
+      isAnimatingRef.current = true
+      animFrameRef.current = requestAnimationFrame(animationLoop)
+    }
+  }, [animationLoop])
 
   // Drop balls
   const handleDrop = useCallback(() => {
     const newBalls: ActiveBall[] = []
     for (let i = 0; i < dropCount; i++) {
       const path = computeBallPath(pegs, level.rows)
+      const staggerDelay = dropCount === 1 ? 0 : -(i * 0.05) // Stagger multi-drops
       newBalls.push({
         id: ballIdCounter++,
         path,
-        progress: 0,
+        progress: staggerDelay,
         hue: (ballIdCounter * 47 + i * 137) % 360,
       })
     }
 
     ballsRef.current = [...ballsRef.current, ...newBalls]
-    setActiveBalls([...ballsRef.current])
     setIsDropping(true)
-
-    // Start animation if not already running
-    cancelAnimationFrame(animFrameRef.current)
-    animFrameRef.current = requestAnimationFrame(animate)
-  }, [dropCount, pegs, level.rows, animate])
+    ensureAnimating()
+  }, [dropCount, pegs, level.rows, ensureAnimating])
 
   // Reset bins
   const handleReset = useCallback(() => {
     cancelAnimationFrame(animFrameRef.current)
+    isAnimatingRef.current = false
     ballsRef.current = []
     setActiveBalls([])
-    setBins(Array(binCount).fill(0))
+    setBins(Array(binCount).fill(0) as number[])
     setTotalBalls(0)
     setIsDropping(false)
   }, [binCount])
 
   // Level change
-  const handleLevelChange = useCallback(
-    (levelId: number) => {
-      cancelAnimationFrame(animFrameRef.current)
-      ballsRef.current = []
-      const newLevel = LEVELS.find((l) => l.id === levelId) ?? LEVELS[0]
-      const newBinCount = getBinCount(newLevel.rows)
-      setCurrentLevelId(levelId)
-      setPegs(createPegs(newLevel))
-      setBins(Array(newBinCount).fill(0))
-      setTotalBalls(0)
-      setActiveBalls([])
-      setSelectedPeg(null)
-      setIsDropping(false)
-    },
-    []
-  )
+  const handleLevelChange = useCallback((levelId: number) => {
+    cancelAnimationFrame(animFrameRef.current)
+    isAnimatingRef.current = false
+    ballsRef.current = []
+    const newLevel = LEVELS.find((l) => l.id === levelId) ?? LEVELS[0]
+    const newBinCount = getBinCount(newLevel.rows)
+    setCurrentLevelId(levelId)
+    setPegs(createPegs(newLevel))
+    setBins(Array(newBinCount).fill(0) as number[])
+    setTotalBalls(0)
+    setActiveBalls([])
+    setSelectedPeg(null)
+    setIsDropping(false)
+  }, [])
 
   // Peg interactions
   const handlePegTap = useCallback(
     (row: number, col: number) => {
-      if (
-        selectedPeg &&
-        selectedPeg.row === row &&
-        selectedPeg.col === col
-      ) {
+      if (selectedPeg && selectedPeg.row === row && selectedPeg.col === col) {
         setSelectedPeg(null)
       } else {
         setSelectedPeg({ row, col })
@@ -183,7 +201,7 @@ export default function PlinkoGame() {
     (row: number, col: number, prob: number) => {
       setPegs((prev) => {
         const next = prev.map((r) => r.map((p) => ({ ...p })))
-        if (next[row] && next[row][col]) {
+        if (next[row]?.[col]) {
           next[row][col].leftProb = prob
         }
         return next
