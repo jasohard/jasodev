@@ -3,6 +3,7 @@ import Layout from './components/Layout/Layout.tsx'
 import HomePage from './pages/HomePage/HomePage.tsx'
 import PendulumPage from './pages/PendulumPage/PendulumPage.tsx'
 import PlinkoGame from './games/plinko/PlinkoGame.tsx'
+import ProofPinball from './games/proofPinball/components/ProofPinball.tsx'
 import NotFoundPage from './pages/NotFoundPage/NotFoundPage.tsx'
 
 export default function App() {
@@ -12,6 +13,7 @@ export default function App() {
         <Route index element={<HomePage />} />
         <Route path="pendulum" element={<PendulumPage />} />
         <Route path="plinko" element={<PlinkoGame />} />
+        <Route path="proof-pinball" element={<ProofPinball />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

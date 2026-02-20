@@ -1,6 +1,7 @@
 import GameCard from '../../components/GameCard/GameCard.tsx'
 import PendulumThumbnail from '../../components/thumbnails/PendulumThumbnail.tsx'
 import PlinkoThumbnail from '../../components/thumbnails/PlinkoThumbnail.tsx'
+import PinballThumbnail from '../../components/thumbnails/PinballThumbnail.tsx'
 import styles from './HomePage.module.css'
 
 export default function HomePage() {
@@ -19,6 +20,12 @@ export default function HomePage() {
           title="Probability Plinko"
           description="Hack a Plinko board by tweaking peg odds to match target distributions. Watch hundreds of balls prove you right — or wrong."
           thumbnail={<PlinkoThumbnail />}
+        />
+        <GameCard
+          to="/proof-pinball"
+          title="Proof Pinball"
+          description="Geometry meets billiards. Aim and launch a ball through geometric rooms — the math of reflection IS the physics."
+          thumbnail={<PinballThumbnail />}
         />
         <GameCard
           to="/pendulum"

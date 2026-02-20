@@ -1,0 +1,300 @@
+/* Mobile-first Proof Pinball styles */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - var(--nav-height));
+  min-height: calc(100dvh - var(--nav-height));
+  background: #1a1a2e;
+  color: var(--color-text);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Level Select */
+.levelSelect {
+  flex: 1;
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-lg);
+  max-width: 480px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.levelSelectTitle {
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-align: center;
+  color: #e8e8f0;
+}
+
+.levelGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-md);
+  width: 100%;
+}
+
+.levelButton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-md);
+  background: #141428;
+  border: 2px solid #2a2a4e;
+  border-radius: 12px;
+  color: var(--color-text);
+  min-height: 80px;
+  min-width: var(--tap-target-min);
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.levelButton:active {
+  transform: scale(0.96);
+  border-color: #00bcd4;
+}
+
+.levelNumber {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #00bcd4;
+}
+
+.levelName {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  line-height: 1.2;
+}
+
+.levelStars {
+  font-size: 0.8rem;
+  letter-spacing: 2px;
+}
+
+/* Header bar */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.levelInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.levelTitle {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #e8e8f0;
+}
+
+.levelSubtitle {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+.shotInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.shotCount {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #00bcd4;
+  font-family: var(--font-mono);
+}
+
+.starDisplay {
+  font-size: 1rem;
+  letter-spacing: 2px;
+}
+
+/* Game area */
+.gameArea {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-sm);
+  touch-action: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.gameSvg {
+  width: 100%;
+  max-width: 440px;
+  max-height: calc(100vh - 200px);
+  max-height: calc(100dvh - 200px);
+}
+
+/* Hint banner */
+.hintBanner {
+  padding: var(--space-sm) var(--space-md);
+  background: rgba(0, 188, 212, 0.1);
+  border-top: 1px solid rgba(0, 188, 212, 0.2);
+  font-size: 0.75rem;
+  color: #80deea;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.hintDismiss {
+  margin-left: var(--space-sm);
+  color: rgba(0, 188, 212, 0.6);
+  min-height: 32px;
+  min-width: 32px;
+  font-size: 0.8rem;
+}
+
+/* Bottom controls */
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  padding-bottom: max(var(--space-md), env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, 0.3);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.controlButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-lg);
+  min-height: var(--tap-target-min);
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+
+.controlButton:active {
+  transform: scale(0.96);
+}
+
+.resetButton {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.levelsButton {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.angleDisplay {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #00bcd4;
+  min-width: 70px;
+  text-align: center;
+}
+
+/* Completion overlay */
+.completionOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-lg);
+  background: rgba(26, 26, 46, 0.92);
+  z-index: 10;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.completionTitle {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #ffd700;
+}
+
+.completionStars {
+  font-size: 2.5rem;
+  letter-spacing: 8px;
+  animation: starsIn 0.5s ease 0.2s both;
+}
+
+@keyframes starsIn {
+  from { transform: scale(0); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.completionMessage {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.completionActions {
+  display: flex;
+  gap: var(--space-md);
+}
+
+.nextButton {
+  composes: controlButton;
+  background: #00bcd4;
+  color: #0a0a1a;
+  font-weight: 700;
+}
+
+.retryButton {
+  composes: controlButton;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-text);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Desktop enhancements */
+@media (hover: hover) {
+  .levelButton:hover {
+    border-color: #00bcd4;
+    transform: translateY(-1px);
+  }
+
+  .controlButton:hover {
+    filter: brightness(1.1);
+  }
+
+  .resetButton:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+}
+
+@media (min-width: 768px) {
+  .levelGrid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .levelSelectTitle {
+    font-size: 1.8rem;
+  }
+}
