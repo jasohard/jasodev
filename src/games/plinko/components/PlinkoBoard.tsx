@@ -1,6 +1,5 @@
 import { useCallback } from 'react'
-import type { Peg, ActiveBall } from '../types'
-import type { LevelConfig } from '../types'
+import type { Peg, ActiveBall, LevelConfig } from '../types'
 import PegGrid from './PegGrid'
 import ProbSlider from './ProbSlider'
 import Histogram from './Histogram'

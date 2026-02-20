@@ -1,23 +1,21 @@
 import type { LevelConfig } from './types'
+import { getBinCount } from './engine'
 
 /**
- * Generate a binomial distribution for n rows with p=0.5 at each peg.
- * With n rows, there are n+1 bins.
+ * Generate a binomial distribution for the given number of bins
+ * (approximating C(n,k) * 0.5^n where n = bins - 1).
  */
-function binomialDistribution(rows: number): number[] {
-  const n = rows
-  const bins = n + 1
+function binomialDistribution(numBins: number): number[] {
+  const n = numBins - 1
   const dist: number[] = []
   let total = 0
 
-  for (let k = 0; k < bins; k++) {
-    // C(n, k) * 0.5^n
+  for (let k = 0; k < numBins; k++) {
     const val = comb(n, k) * Math.pow(0.5, n)
     dist.push(val)
     total += val
   }
 
-  // Normalize
   return dist.map((v) => v / total)
 }
 
@@ -35,11 +33,11 @@ function comb(n: number, k: number): number {
 /**
  * Generate a left-skewed distribution (most balls land in left bins).
  */
-function leftSkewedDistribution(bins: number): number[] {
+function leftSkewedDistribution(numBins: number): number[] {
   const dist: number[] = []
   let total = 0
-  for (let i = 0; i < bins; i++) {
-    const val = Math.pow(bins - i, 2.5)
+  for (let i = 0; i < numBins; i++) {
+    const val = Math.pow(numBins - i, 2.5)
     dist.push(val)
     total += val
   }
@@ -49,22 +47,22 @@ function leftSkewedDistribution(bins: number): number[] {
 /**
  * Generate a uniform distribution.
  */
-function uniformDistribution(bins: number): number[] {
-  const val = 1 / bins
-  return Array(bins).fill(val)
+function uniformDistribution(numBins: number): number[] {
+  const val = 1 / numBins
+  return Array(numBins).fill(val) as number[]
 }
 
 /**
  * Generate a bimodal distribution (two peaks).
  */
-function bimodalDistribution(bins: number): number[] {
+function bimodalDistribution(numBins: number): number[] {
   const dist: number[] = []
   let total = 0
-  const center = (bins - 1) / 2
+  const center = (numBins - 1) / 2
   const peak1 = Math.floor(center * 0.3)
   const peak2 = Math.ceil(center + center * 0.7)
 
-  for (let i = 0; i < bins; i++) {
+  for (let i = 0; i < numBins; i++) {
     const d1 = Math.exp(-Math.pow(i - peak1, 2) / 1.5)
     const d2 = Math.exp(-Math.pow(i - peak2, 2) / 1.5)
     const val = d1 + d2
@@ -77,10 +75,10 @@ function bimodalDistribution(bins: number): number[] {
 /**
  * Generate a right-heavy distribution (most balls in rightmost bins).
  */
-function rightHeavyDistribution(bins: number): number[] {
+function rightHeavyDistribution(numBins: number): number[] {
   const dist: number[] = []
   let total = 0
-  for (let i = 0; i < bins; i++) {
+  for (let i = 0; i < numBins; i++) {
     const val = Math.pow(i + 1, 3)
     dist.push(val)
     total += val
@@ -91,11 +89,11 @@ function rightHeavyDistribution(bins: number): number[] {
 /**
  * Generate a sharp center peak distribution.
  */
-function sharpPeakDistribution(bins: number): number[] {
+function sharpPeakDistribution(numBins: number): number[] {
   const dist: number[] = []
   let total = 0
-  const center = (bins - 1) / 2
-  for (let i = 0; i < bins; i++) {
+  const center = (numBins - 1) / 2
+  for (let i = 0; i < numBins; i++) {
     const val = Math.exp(-Math.pow(i - center, 2) / 0.8)
     dist.push(val)
     total += val
@@ -103,13 +101,17 @@ function sharpPeakDistribution(bins: number): number[] {
   return dist.map((v) => v / total)
 }
 
+/**
+ * Level definitions. Each target distribution is generated using the
+ * correct bin count from the engine (based on row count).
+ */
 export const LEVELS: LevelConfig[] = [
   {
     id: 1,
     name: 'Bell Curve Basics',
     subtitle: 'Watch the magic of 50/50 odds',
     rows: 3,
-    targetDistribution: binomialDistribution(3),
+    targetDistribution: binomialDistribution(getBinCount(3)),
     star1Threshold: 30,
     star2Threshold: 50,
     star3Threshold: 70,
@@ -123,7 +125,7 @@ export const LEVELS: LevelConfig[] = [
     name: 'Lean Left',
     subtitle: 'Skew the distribution leftward',
     rows: 4,
-    targetDistribution: leftSkewedDistribution(5),
+    targetDistribution: leftSkewedDistribution(getBinCount(4)),
     star1Threshold: 60,
     star2Threshold: 75,
     star3Threshold: 90,
@@ -137,7 +139,7 @@ export const LEVELS: LevelConfig[] = [
     name: 'Uniform Distribution',
     subtitle: 'Make every bin equally likely',
     rows: 5,
-    targetDistribution: uniformDistribution(6),
+    targetDistribution: uniformDistribution(getBinCount(5)),
     star1Threshold: 60,
     star2Threshold: 75,
     star3Threshold: 88,
@@ -151,7 +153,7 @@ export const LEVELS: LevelConfig[] = [
     name: 'Bimodal',
     subtitle: 'Create two peaks',
     rows: 5,
-    targetDistribution: bimodalDistribution(6),
+    targetDistribution: bimodalDistribution(getBinCount(5)),
     star1Threshold: 55,
     star2Threshold: 70,
     star3Threshold: 85,
@@ -165,7 +167,7 @@ export const LEVELS: LevelConfig[] = [
     name: 'Right Pile',
     subtitle: 'Stack everything to the right',
     rows: 6,
-    targetDistribution: rightHeavyDistribution(7),
+    targetDistribution: rightHeavyDistribution(getBinCount(6)),
     star1Threshold: 60,
     star2Threshold: 75,
     star3Threshold: 90,
@@ -179,7 +181,7 @@ export const LEVELS: LevelConfig[] = [
     name: 'Sharp Peak',
     subtitle: 'Concentrate balls in the center',
     rows: 7,
-    targetDistribution: sharpPeakDistribution(8),
+    targetDistribution: sharpPeakDistribution(getBinCount(7)),
     star1Threshold: 55,
     star2Threshold: 70,
     star3Threshold: 85,
