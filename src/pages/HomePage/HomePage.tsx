@@ -1,5 +1,6 @@
 import GameCard from '../../components/GameCard/GameCard.tsx'
 import PendulumThumbnail from '../../components/thumbnails/PendulumThumbnail.tsx'
+import PlinkoThumbnail from '../../components/thumbnails/PlinkoThumbnail.tsx'
 import styles from './HomePage.module.css'
 
 export default function HomePage() {
@@ -13,6 +14,12 @@ export default function HomePage() {
       </section>
 
       <section className={styles.grid} aria-label="Available games">
+        <GameCard
+          to="/plinko"
+          title="Probability Plinko"
+          description="Hack a Plinko board by tweaking peg odds to match target distributions. Watch hundreds of balls prove you right — or wrong."
+          thumbnail={<PlinkoThumbnail />}
+        />
         <GameCard
           to="/pendulum"
           title="Pendulum Flows"

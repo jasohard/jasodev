@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout/Layout.tsx'
 import HomePage from './pages/HomePage/HomePage.tsx'
 import PendulumPage from './pages/PendulumPage/PendulumPage.tsx'
+import PlinkoGame from './games/plinko/PlinkoGame.tsx'
 import NotFoundPage from './pages/NotFoundPage/NotFoundPage.tsx'
 
 export default function App() {
@@ -10,6 +11,7 @@ export default function App() {
       <Route element={<Layout />}>
         <Route index element={<HomePage />} />
         <Route path="pendulum" element={<PendulumPage />} />
+        <Route path="plinko" element={<PlinkoGame />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

@@ -1,0 +1,138 @@
+/* Plinko game controls */
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+}
+
+/* ─── Drop button (primary CTA) ───────── */
+
+.dropBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: 12px 28px;
+  background: linear-gradient(135deg, #7c5cbf 0%, #6c4caf 100%);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  min-height: 48px;
+  min-width: 120px;
+  transition: transform var(--transition-fast), opacity var(--transition-fast),
+    box-shadow var(--transition-fast);
+  box-shadow: 0 4px 16px rgba(124, 92, 191, 0.35);
+}
+
+.dropBtn:active {
+  transform: scale(0.95);
+}
+
+.dropBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@media (hover: hover) {
+  .dropBtn:hover:not(:disabled) {
+    box-shadow: 0 6px 20px rgba(124, 92, 191, 0.5);
+    transform: translateY(-1px);
+  }
+}
+
+.dropIcon {
+  flex-shrink: 0;
+}
+
+/* ─── Toggle buttons (drop count, speed) ── */
+
+.toggleBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 12px;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  border-radius: 10px;
+  cursor: pointer;
+  min-height: 48px;
+  min-width: 52px;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.toggleBtn:active {
+  background: var(--color-surface-hover);
+  border-color: var(--color-accent);
+}
+
+@media (hover: hover) {
+  .toggleBtn:hover {
+    border-color: var(--color-accent-hover);
+  }
+}
+
+.toggleLabel {
+  font-size: 0.6rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.toggleValue {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+}
+
+/* ─── Reset button ─────────────────────── */
+
+.resetBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  min-height: 36px;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.resetBtn:active {
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+
+@media (hover: hover) {
+  .resetBtn:hover {
+    color: var(--color-text);
+    border-color: var(--color-text-muted);
+  }
+}
+
+/* ─── Ball count ───────────────────────── */
+
+.ballCount {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
