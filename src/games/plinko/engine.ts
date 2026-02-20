@@ -169,7 +169,8 @@ export function computeBallPath(pegs: Peg[][], totalRows: number): BallPath {
   // After the last row, ballPos is in wide-row coords.
   // Map to bin index. Bins go from -0.5 to wideCount-0.5 in wide coords.
   // Bin 0 = below left of peg 0, Bin 1 = between peg 0 and peg 1, etc.
-  let binIndex = Math.round(ballPos)
+  // Guard against NaN from floating point edge cases.
+  let binIndex = Number.isFinite(ballPos) ? Math.round(ballPos) : Math.floor(binCount / 2)
   binIndex = Math.max(0, Math.min(binCount - 1, binIndex))
 
   // Final position: center of the bin
