@@ -74,7 +74,7 @@ export interface LevelConfig {
   maxBounces: number
 }
 
-export type GamePhase = 'aiming' | 'animating' | 'complete' | 'levelSelect'
+export type GamePhase = 'aiming' | 'animating' | 'complete' | 'failed' | 'levelSelect'
 
 export interface GameState {
   /** Current level config */

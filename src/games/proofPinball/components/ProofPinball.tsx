@@ -79,7 +79,7 @@ export default function ProofPinball() {
       // Start aiming if near launch point
       if (dist < 120) {
         dispatch({ type: 'START_AIM' })
-        ;(e.target as Element).setPointerCapture?.(e.pointerId)
+        svgRef.current?.setPointerCapture(e.pointerId)
       }
     },
     [phase, level.launchPoint, svgPoint, reflectors, selectedReflectorId]
@@ -393,6 +393,19 @@ export default function ProofPinball() {
               opacity="0.9"
             />
           ))}
+          {/* Wall corner vertices */}
+          {(() => {
+            const vertices = new Map<string, Vec2>()
+            for (const wall of level.walls) {
+              const sk = `${Math.round(wall.start.x)},${Math.round(wall.start.y)}`
+              const ek = `${Math.round(wall.end.x)},${Math.round(wall.end.y)}`
+              vertices.set(sk, wall.start)
+              vertices.set(ek, wall.end)
+            }
+            return Array.from(vertices.entries()).map(([key, v]) => (
+              <circle key={`v-${key}`} cx={v.x} cy={v.y} r={3} fill="#fff" opacity="0.6" />
+            ))
+          })()}
 
           {/* Reflectors */}
           {reflectors.map((ref) => {
@@ -551,6 +564,21 @@ export default function ProofPinball() {
 
           {/* Launch point */}
           <g>
+            {/* Pulse ring (aiming mode) */}
+            {phase === 'aiming' && !isAiming && (
+              <circle
+                cx={level.launchPoint.x}
+                cy={level.launchPoint.y}
+                r={16}
+                fill="none"
+                stroke="#4caf50"
+                strokeWidth="1.5"
+                opacity="0"
+              >
+                <animate attributeName="r" from="16" to="30" dur="1.5s" repeatCount="indefinite" />
+                <animate attributeName="opacity" from="0.5" to="0" dur="1.5s" repeatCount="indefinite" />
+              </circle>
+            )}
             {/* Outer ring */}
             <circle
               cx={level.launchPoint.x}
@@ -606,7 +634,6 @@ export default function ProofPinball() {
                     strokeWidth="2"
                     opacity="0.8"
                     strokeLinecap="round"
-                    markerEnd=""
                   />
                 )
               })()}
@@ -651,6 +678,40 @@ export default function ProofPinball() {
           {targets.filter((t) => t.hit).map((target) => (
             <HitParticles key={`particles-${target.id}`} center={target.center} />
           ))}
+
+          {/* Bounce counter during animation */}
+          {phase === 'animating' && (
+            <g>
+              <rect x={VIEWBOX_W - 75} y={8} width={65} height={24} rx={6} fill="rgba(0,0,0,0.5)" />
+              <text
+                x={VIEWBOX_W - 42}
+                y={24}
+                textAnchor="middle"
+                fontSize="11"
+                fontFamily="monospace"
+                fill="#80deea"
+              >
+                {visibleBounces.length} {visibleBounces.length === 1 ? 'bounce' : 'bounces'}
+              </text>
+            </g>
+          )}
+
+          {/* Target status during animation */}
+          {phase === 'animating' && targets.length > 1 && (
+            <g>
+              <rect x={8} y={8} width={80} height={24} rx={6} fill="rgba(0,0,0,0.5)" />
+              <text
+                x={48}
+                y={24}
+                textAnchor="middle"
+                fontSize="11"
+                fontFamily="monospace"
+                fill={targets.every((t) => t.hit) ? '#4caf50' : '#ffd700'}
+              >
+                {targets.filter((t) => t.hit).length}/{targets.length} targets
+              </text>
+            </g>
+          )}
         </svg>
 
         {/* Completion overlay */}
@@ -685,6 +746,32 @@ export default function ProofPinball() {
                   Next Level
                 </button>
               )}
+              <button
+                className={styles.retryButton}
+                onClick={() => dispatch({ type: 'GO_TO_LEVEL_SELECT' })}
+              >
+                Levels
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Failed overlay */}
+        {phase === 'failed' && (
+          <div className={styles.completionOverlay}>
+            <div className={styles.failedTitle}>Out of Shots!</div>
+            <div className={styles.completionMessage}>
+              You used all {level.maxShots} shots without hitting every target.
+              <br />
+              Targets hit: {targets.filter((t) => t.hit).length}/{targets.length}
+            </div>
+            <div className={styles.completionActions}>
+              <button
+                className={styles.nextButton}
+                onClick={() => dispatch({ type: 'RESET_LEVEL' })}
+              >
+                Try Again
+              </button>
               <button
                 className={styles.retryButton}
                 onClick={() => dispatch({ type: 'GO_TO_LEVEL_SELECT' })}

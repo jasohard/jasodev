@@ -77,15 +77,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           levelStars: newLevelStars,
         }
       }
-      // If not all targets hit, go back to aiming
+      // If not all targets hit, check if out of shots
       if (state.shotsTaken >= state.level.maxShots) {
-        // Out of shots - level failed, reset
         return {
           ...state,
-          phase: 'aiming',
-          currentPath: null,
-          targets: resetTargets(state.level.targets),
-          shotsTaken: 0,
+          phase: 'failed',
         }
       }
       return {
