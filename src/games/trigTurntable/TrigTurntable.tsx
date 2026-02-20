@@ -49,7 +49,7 @@ export default function TrigTurntable() {
 
   const {
     level, circles, selectedCircleIndex, time, isPlaying,
-    speed, matchScore, stars, levelStars, phase, waveTrace,
+    speed, matchScore, stars, levelStars, phase,
   } = state
 
   const selectedCircle = circles[selectedCircleIndex]
