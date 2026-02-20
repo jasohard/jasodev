@@ -20,7 +20,6 @@ import {
   numericalDerivative,
   surferSpeed,
   checkGemCollision,
-  checkTargetReached,
   landingPrecision,
   computeStars,
   createGemBurst,
@@ -211,14 +210,16 @@ export default function SlopeSurfer() {
       // Will be cleared by timeout
     }
 
-    // Check if surfer has gone past the end
-    if (newX >= lev.endPoint.x) {
-      const curveY = cf(lev.endPoint.x)
-      anim.phase = 'done'
-      anim.x = lev.endPoint.x
+    // Check if surfer has reached the target zone or gone past the end
+    const reachedTarget = newX >= lev.target.xStart
+    const reachedEnd = newX >= lev.endPoint.x
 
-      if (checkTargetReached(newX, curveY, lev.target)) {
-        const precision = landingPrecision(newX, lev.target)
+    if (reachedEnd || reachedTarget) {
+      anim.phase = 'done'
+      anim.x = Math.min(newX, lev.endPoint.x)
+
+      if (reachedTarget) {
+        const precision = landingPrecision(Math.min(newX, lev.endPoint.x), lev.target)
 
         // Landing burst particles
         const burstPos = { x: (lev.target.xStart + lev.target.xEnd) / 2, y: lev.target.yCenter }

@@ -1,6 +1,7 @@
 /**
  * Surfer — The surfer character riding the curve.
  * The board IS the tangent line, rotating to match the slope.
+ * The surfer body sits above the board along the curve normal.
  */
 
 import { memo, useMemo } from 'react'
@@ -16,90 +17,142 @@ interface SurferProps {
 }
 
 function SurferComponent({ curveFunc, x, speed, derivative, isRiding, boardFlash }: SurferProps) {
-  const { start, end, angle } = useMemo(
-    () => tangentLine(curveFunc, x, 16),
+  const tl = useMemo(
+    () => tangentLine(curveFunc, x, 18),
     [curveFunc, x]
   )
 
   const y = curveFunc(x)
-  const angleDeg = angle * (180 / Math.PI)
   const cls = classifySpeed(Math.abs(derivative))
   const sColor = speedColor(cls)
 
   // Board flash effect
   const boardStroke = boardFlash ? '#ffd700' : '#ffffff'
-  const boardWidth = boardFlash ? 3.5 : 2.5
+  const boardWidth = boardFlash ? 4 : 2.5
+
+  // Normal direction (perpendicular up from the curve)
+  // For a slope angle θ, the upward normal is (-sin(θ), -cos(θ))
+  // We want the surfer to always be "above" the board visually
+  const nx = -Math.sin(tl.angle)
+  const ny = -Math.cos(tl.angle)
+  // Ensure the normal always points roughly upward
+  const sign = ny < 0 ? 1 : -1
+
+  // Body points relative to (x, y) along normal
+  const feetY = y + sign * ny * 2
+  const feetX = x + sign * nx * 2
+  const hipY = y + sign * ny * 8
+  const hipX = x + sign * nx * 8
+  const headY = y + sign * ny * 16
+  const headX = x + sign * nx * 16
+  const armY = y + sign * ny * 11
+  const armX = x + sign * nx * 11
+
+  // Arm spread along tangent direction
+  const armSpread = 7
+  const tx = Math.cos(tl.angle)
+  const ty = Math.sin(tl.angle)
 
   return (
     <g style={{ pointerEvents: 'none' }}>
+      {/* Speed glow */}
+      {isRiding && speed > 40 && (
+        <circle
+          cx={x}
+          cy={y}
+          r={6 + speed * 0.04}
+          fill={sColor}
+          opacity={0.1}
+        >
+          <animate
+            attributeName="opacity"
+            values="0.1;0.05;0.1"
+            dur="0.5s"
+            repeatCount="indefinite"
+          />
+        </circle>
+      )}
+
       {/* Tangent line (the board) */}
       <line
-        x1={start.x}
-        y1={start.y}
-        x2={end.x}
-        y2={end.y}
+        x1={tl.start.x}
+        y1={tl.start.y}
+        x2={tl.end.x}
+        y2={tl.end.y}
         stroke={boardStroke}
         strokeWidth={boardWidth}
         strokeLinecap="round"
         style={{ transition: 'stroke 0.1s ease' }}
       />
 
-      {/* Surfer body — simple geometric figure */}
-      <g transform={`translate(${x}, ${y})`}>
-        {/* Glow behind surfer when fast */}
-        {isRiding && speed > 40 && (
-          <circle
-            r={8 + speed * 0.05}
-            fill={sColor}
-            opacity={0.15}
-          >
-            <animate
-              attributeName="opacity"
-              values="0.15;0.08;0.15"
-              dur="0.5s"
-              repeatCount="indefinite"
-            />
-          </circle>
-        )}
+      {/* Board accent line */}
+      <line
+        x1={tl.start.x}
+        y1={tl.start.y}
+        x2={tl.end.x}
+        y2={tl.end.y}
+        stroke={sColor}
+        strokeWidth={1}
+        strokeLinecap="round"
+        opacity={0.35}
+      />
 
-        {/* Body (circle) */}
+      {/* Surfer body */}
+      <g>
+        {/* Legs */}
+        <line
+          x1={feetX - tx * 3} y1={feetY - ty * 3}
+          x2={hipX} y2={hipY}
+          stroke="#ffffff"
+          strokeWidth={1.8}
+          strokeLinecap="round"
+        />
+        <line
+          x1={feetX + tx * 3} y1={feetY + ty * 3}
+          x2={hipX} y2={hipY}
+          stroke="#ffffff"
+          strokeWidth={1.8}
+          strokeLinecap="round"
+        />
+
+        {/* Torso */}
+        <line
+          x1={hipX} y1={hipY}
+          x2={headX} y2={headY}
+          stroke="#ffffff"
+          strokeWidth={2}
+          strokeLinecap="round"
+        />
+
+        {/* Arms */}
+        <line
+          x1={armX - tx * armSpread} y1={armY - ty * armSpread}
+          x2={armX + tx * armSpread} y2={armY + ty * armSpread}
+          stroke="#ffffff"
+          strokeWidth={1.5}
+          strokeLinecap="round"
+        />
+
+        {/* Head */}
         <circle
-          r={5}
+          cx={headX}
+          cy={headY}
+          r={3.5}
           fill="#ffffff"
           stroke={sColor}
-          strokeWidth={1.5}
-          cy={-10}
-          transform={`rotate(${angleDeg})`}
+          strokeWidth={1}
           style={{ transition: 'stroke 0.15s ease' }}
-        />
-
-        {/* Legs connecting to board */}
-        <line
-          x1={0} y1={-5}
-          x2={-3} y2={0}
-          stroke="#ffffff"
-          strokeWidth={1.5}
-          strokeLinecap="round"
-          transform={`rotate(${angleDeg})`}
-        />
-        <line
-          x1={0} y1={-5}
-          x2={3} y2={0}
-          stroke="#ffffff"
-          strokeWidth={1.5}
-          strokeLinecap="round"
-          transform={`rotate(${angleDeg})`}
         />
       </g>
 
-      {/* Speed indicator dot */}
+      {/* Contact point */}
       {isRiding && (
         <circle
           cx={x}
           cy={y}
-          r={3}
+          r={2}
           fill={sColor}
-          opacity={0.8}
+          opacity={0.6}
         />
       )}
     </g>
