@@ -1,0 +1,501 @@
+/* Mobile-first Trig Turntable styles */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - var(--nav-height));
+  min-height: calc(100dvh - var(--nav-height));
+  background: #0d1117;
+  color: var(--color-text);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── Level Select ───────────────────────────── */
+
+.levelSelect {
+  flex: 1;
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-lg);
+  max-width: 480px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.levelSelectTitle {
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-align: center;
+  background: linear-gradient(135deg, #4fc3f7, #f06292);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.levelGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-md);
+  width: 100%;
+}
+
+.levelButton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-md);
+  background: #161b22;
+  border: 2px solid #30363d;
+  border-radius: 12px;
+  color: var(--color-text);
+  min-height: 80px;
+  min-width: var(--tap-target-min);
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.levelButton:active {
+  transform: scale(0.96);
+  border-color: #4fc3f7;
+}
+
+.levelNumber {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #4fc3f7;
+}
+
+.levelName {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  line-height: 1.2;
+}
+
+.levelStars {
+  font-size: 0.8rem;
+  letter-spacing: 2px;
+}
+
+.artBadge {
+  font-size: 0.6rem;
+  background: linear-gradient(135deg, #4fc3f7, #f06292);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 700;
+}
+
+/* ── Header ─────────────────────────────────── */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  background: rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.levelInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.levelTitle {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #e8e8f0;
+}
+
+.levelSubtitle {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+.scoreInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.matchScore {
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  min-width: 50px;
+  text-align: right;
+}
+
+.starDisplay {
+  font-size: 1rem;
+  letter-spacing: 2px;
+}
+
+/* ── Visualization area ─────────────────────── */
+
+.vizArea {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.svgContainer {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 4px;
+}
+
+.gameSvg {
+  width: 100%;
+  height: 100%;
+  max-height: calc(100vh - 320px);
+  max-height: calc(100dvh - 320px);
+}
+
+/* ── Equation display ───────────────────────── */
+
+.equationBar {
+  padding: var(--space-xs) var(--space-md);
+  background: rgba(0, 0, 0, 0.3);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: #80deea;
+  white-space: nowrap;
+  overflow-x: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  line-height: 1.6;
+}
+
+/* ── Parameter controls panel ───────────────── */
+
+.controlsPanel {
+  flex-shrink: 0;
+  padding: var(--space-sm) var(--space-md);
+  background: rgba(0, 0, 0, 0.3);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.circleSelector {
+  display: flex;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.circleTab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  min-height: 32px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 2px solid transparent;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+  white-space: nowrap;
+}
+
+.circleTabActive {
+  composes: circleTab;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.circleTabDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.removeCircle {
+  min-height: 20px;
+  min-width: 20px;
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  opacity: 0.6;
+  padding: 0;
+}
+
+.addCircleBtn {
+  min-height: 32px;
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+/* ── Sliders ────────────────────────────────── */
+
+.paramRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: 6px;
+}
+
+.paramLabel {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  min-width: 36px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.paramSlider {
+  flex: 1;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #30363d;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.paramSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #4fc3f7;
+  cursor: pointer;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.paramSlider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #4fc3f7;
+  cursor: pointer;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.paramValue {
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: var(--color-text);
+  min-width: 42px;
+  text-align: right;
+}
+
+.paramLocked {
+  font-size: 0.6rem;
+  color: var(--color-text-muted);
+  opacity: 0.5;
+}
+
+/* ── Transport controls ─────────────────────── */
+
+.transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  padding-bottom: max(var(--space-sm), env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, 0.3);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.transportBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: var(--tap-target-min);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+
+.transportBtn:active {
+  transform: scale(0.96);
+}
+
+.playBtn {
+  composes: transportBtn;
+  background: rgba(79, 195, 247, 0.15);
+  color: #4fc3f7;
+  border: 1px solid rgba(79, 195, 247, 0.3);
+}
+
+.resetBtn {
+  composes: transportBtn;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.levelsBtn {
+  composes: transportBtn;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.speedBtn {
+  composes: transportBtn;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  min-width: 52px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.submitBtn {
+  composes: transportBtn;
+  background: rgba(76, 175, 80, 0.2);
+  color: #81c784;
+  border: 1px solid rgba(76, 175, 80, 0.4);
+}
+
+/* ── Hint banner ────────────────────────────── */
+
+.hintBanner {
+  padding: var(--space-xs) var(--space-md);
+  background: rgba(79, 195, 247, 0.08);
+  border-bottom: 1px solid rgba(79, 195, 247, 0.15);
+  font-size: 0.72rem;
+  color: #80deea;
+  text-align: center;
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+}
+
+.hintDismiss {
+  color: rgba(79, 195, 247, 0.5);
+  min-height: 28px;
+  min-width: 28px;
+  font-size: 0.7rem;
+  padding: 0;
+}
+
+/* ── Completion overlay ─────────────────────── */
+
+.completionOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-lg);
+  background: rgba(13, 17, 23, 0.92);
+  z-index: 10;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.completionTitle {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #ffd54f;
+}
+
+.completionStars {
+  font-size: 2.5rem;
+  letter-spacing: 8px;
+  animation: starsIn 0.5s ease 0.2s both;
+}
+
+@keyframes starsIn {
+  from { transform: scale(0); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.completionMessage {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.completionActions {
+  display: flex;
+  gap: var(--space-md);
+}
+
+.nextButton {
+  composes: transportBtn;
+  background: #4fc3f7;
+  color: #0d1117;
+  font-weight: 700;
+}
+
+.retryButton {
+  composes: transportBtn;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* ── Desktop enhancements ───────────────────── */
+
+@media (hover: hover) {
+  .levelButton:hover {
+    border-color: #4fc3f7;
+    transform: translateY(-1px);
+  }
+
+  .addCircleBtn:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    color: var(--color-text);
+  }
+
+  .transportBtn:hover {
+    filter: brightness(1.15);
+  }
+}
+
+@media (min-width: 768px) {
+  .levelGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .levelSelectTitle {
+    font-size: 2rem;
+  }
+
+  .gameSvg {
+    max-height: calc(100vh - 280px);
+    max-height: calc(100dvh - 280px);
+  }
+}
+
+@media (min-width: 1024px) {
+  .gameSvg {
+    max-height: calc(100vh - 260px);
+    max-height: calc(100dvh - 260px);
+  }
+}

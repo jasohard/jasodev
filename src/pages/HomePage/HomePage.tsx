@@ -3,6 +3,7 @@ import PendulumThumbnail from '../../components/thumbnails/PendulumThumbnail.tsx
 import PlinkoThumbnail from '../../components/thumbnails/PlinkoThumbnail.tsx'
 import PinballThumbnail from '../../components/thumbnails/PinballThumbnail.tsx'
 import VectorThumbnail from '../../components/thumbnails/VectorThumbnail.tsx'
+import TrigThumbnail from '../../components/thumbnails/TrigThumbnail.tsx'
 import styles from './HomePage.module.css'
 
 export default function HomePage() {
@@ -33,6 +34,12 @@ export default function HomePage() {
           title="Proof Pinball"
           description="Geometry meets billiards. Aim and launch a ball through geometric rooms — the math of reflection IS the physics."
           thumbnail={<PinballThumbnail />}
+        />
+        <GameCard
+          to="/trig"
+          title="Trig Turntable"
+          description="Stack spinning circles to create mesmerizing wave patterns. One circle makes a sine wave. Four make art. Accidentally learn Fourier analysis."
+          thumbnail={<TrigThumbnail />}
         />
         <GameCard
           to="/pendulum"

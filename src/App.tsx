@@ -5,6 +5,7 @@ import PendulumPage from './pages/PendulumPage/PendulumPage.tsx'
 import PlinkoGame from './games/plinko/PlinkoGame.tsx'
 import ProofPinball from './games/proofPinball/components/ProofPinball.tsx'
 import VectorVoyager from './games/vectorVoyager/VectorVoyager.tsx'
+import TrigTurntable from './games/trigTurntable/TrigTurntable.tsx'
 import NotFoundPage from './pages/NotFoundPage/NotFoundPage.tsx'
 
 export default function App() {
@@ -16,6 +17,7 @@ export default function App() {
         <Route path="plinko" element={<PlinkoGame />} />
         <Route path="proof-pinball" element={<ProofPinball />} />
         <Route path="vectors" element={<VectorVoyager />} />
+        <Route path="trig" element={<TrigTurntable />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
