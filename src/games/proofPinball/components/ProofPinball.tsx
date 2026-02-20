@@ -866,14 +866,21 @@ export default function ProofPinball() {
 
 // ── Helper functions ─────────────────────────────────────
 
-/** Calculate the fraction along the path where the goal is reached */
+/**
+ * Calculate the fraction (0-1) along the path where the goal zone is first entered.
+ * goalReachedAtPoint is the index of the bounce point at the END of the segment
+ * that crosses the goal zone (set before push, so it equals the post-push index).
+ * We accumulate distance to that point to find when to trigger the goal event.
+ */
 function getGoalFraction(path: { points: Vec2[]; goalReachedAtPoint: number }): number {
   if (path.goalReachedAtPoint < 0) return 2 // Never reached
   const totalLen = pathLength(path.points)
   if (totalLen === 0) return 0
 
+  // Sum segment lengths up to and including the goalReachedAtPoint index
   let accumulated = 0
-  for (let i = 1; i <= path.goalReachedAtPoint && i < path.points.length; i++) {
+  const endIdx = Math.min(path.goalReachedAtPoint, path.points.length - 1)
+  for (let i = 1; i <= endIdx; i++) {
     accumulated += distance(path.points[i - 1], path.points[i])
   }
   return accumulated / totalLen

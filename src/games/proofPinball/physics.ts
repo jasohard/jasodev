@@ -400,9 +400,9 @@ export function getEnergyAtFraction(energyAtPoints: number[], points: Vec2[], fr
     const segLen = distance(points[i - 1], points[i])
     if (accumulated + segLen >= targetDist) {
       const segFrac = segLen > 0 ? (targetDist - accumulated) / segLen : 0
-      const e0 = energyAtPoints[i - 1] ?? 1
-      const e1 = energyAtPoints[i] ?? 0
-      return e0 + (e1 - e0) * segFrac
+      const startEnergy = energyAtPoints[i - 1] ?? 1
+      const endEnergy = energyAtPoints[i] ?? 0
+      return startEnergy + (endEnergy - startEnergy) * segFrac
     }
     accumulated += segLen
   }
