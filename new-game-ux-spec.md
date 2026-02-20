@@ -1,8 +1,9 @@
 # Slope Surfer — UX Specification
 
-> **UX Designer:** Senior UX Designer (Mobile-First Interactive)
+> **UX Designer:** Senior UX Designer (Mobile-First Interactive Applications)
 > **Based on:** `new-game-design.md` (Game Design Spec)
 > **Design Principle:** Every pixel earns its place. Every interaction has feedback. The derivative isn't abstract — it's something you *feel*.
+> **Design System Ref:** `src/index.css` (global tokens), existing game CSS modules
 
 ---
 
@@ -400,14 +401,24 @@ Following the existing codebase pattern (all 4 games use `onPointerDown`/`onPoin
 }
 ```
 
+### Focus Management
+
+- On level load, focus moves to the first control point (or SURF! button if Level 1 has no control points)
+- On phase transition to Success, focus moves to "Next Level" button
+- On phase transition to Failed, focus moves to "Retry" button
+- Tab trap within score overlay when open — Tab cycles through Retry / Next / Levels only
+- `focus-visible` outline: 2px solid `var(--color-accent)` with 2px offset (matches global `:focus-visible` style from `src/index.css`)
+- Focus ring uses existing design token — no custom focus styles needed
+
 ### Screen Reader Experience
 
 For screen reader users, the game provides a text-based alternative:
-- Level description read aloud on entry
-- Control point values announced as they change (aria-live region)
+- Level description read aloud on entry via page title update (`document.title = "Slope Surfer - Level 2: The Hill"`)
+- Control point values announced as they change (aria-live region, debounced to 200ms to avoid flooding)
 - Speed readout announced periodically during ride (polite, every 2s)
 - Gem collection announced ("Gem collected! 2 of 4")
 - Level result announced ("Level complete! 2 stars. Retry or next level.")
+- Decorative SVG elements (stars, particles, grid lines) use `aria-hidden="true"`
 
 ---
 
@@ -837,6 +848,65 @@ min-height: var(--tap-target-min);
 font-family: var(--font-mono);
 color: var(--color-text-muted);
 ```
+
+---
+
+## Appendix A: SVG Filter Definitions
+
+These SVG filters are defined once in a `<defs>` block and referenced by `filter="url(#name)"`:
+
+```xml
+<!-- Control point glow when grabbed -->
+<filter id="controlGlow">
+  <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="blur"/>
+  <feFlood flood-color="#00e5ff" flood-opacity="0.6" result="color"/>
+  <feComposite in="color" in2="blur" operator="in" result="glow"/>
+  <feMerge>
+    <feMergeNode in="glow"/>
+    <feMergeNode in="SourceGraphic"/>
+  </feMerge>
+</filter>
+
+<!-- Gem golden glow -->
+<filter id="gemGlow">
+  <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="blur"/>
+  <feFlood flood-color="#ffd700" flood-opacity="0.5" result="color"/>
+  <feComposite in="color" in2="blur" operator="in" result="glow"/>
+  <feMerge>
+    <feMergeNode in="glow"/>
+    <feMergeNode in="SourceGraphic"/>
+  </feMerge>
+</filter>
+
+<!-- Speed aura behind surfer -->
+<filter id="speedGlow">
+  <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="blur"/>
+  <feFlood flood-color="currentColor" flood-opacity="0.4" result="color"/>
+  <feComposite in="color" in2="blur" operator="in" result="glow"/>
+  <feMerge>
+    <feMergeNode in="glow"/>
+    <feMergeNode in="SourceGraphic"/>
+  </feMerge>
+</filter>
+```
+
+## Appendix B: On-Screen Element Count Per Phase
+
+To stay within the 60-element SVG budget:
+
+| Phase | Static Elements | Dynamic Elements | Total (max) |
+|-------|----------------|-----------------|-------------|
+| Planning | Sky rect (1) + stars (30) + grid (10) + curve path (2) + fill (1) = 44 | Control points (3×3=9) + gems (6×2=12) + target (3) + surfer (3) = 27 | ~71 — **optimize**: skip grid when not toggled, reduce stars to 20 |
+| Planning (optimized) | Sky (1) + stars (20) + curve (2) + fill (1) = 24 | Control points (9) + gems (12) + target (3) + surfer (3) = 27 | **51** ✅ |
+| Riding | Sky (1) + stars (20) + curve (2) + fill (1) = 24 | Surfer (3) + trail (12) + gems (12) + target (3) + particles (up to 40) + speed readout (1) = 71 | ~95 — **optimize**: reduce trail to 8, particles realistically peak at ~20 |
+| Riding (optimized) | 24 | Surfer (3) + trail (8) + gems (6) + target (3) + particles (20) + HUD (3) = 43 | **67** — acceptable with particle cap |
+
+**Key optimization strategies:**
+- Stars: Generate 20 (not 40) — memoized via `useMemo`
+- Grid lines: Only render when speed overlay is active
+- Gems: `memo` wrap, remove from DOM after collection (not just hidden)
+- Trail: Cap at 8 circles (not 12)
+- Particles: Hard cap at 40, FIFO removal
 
 ---
 
