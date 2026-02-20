@@ -319,7 +319,7 @@ export function interpolatePath(points: Vec2[], fraction: number): Vec2 {
   for (let i = 0; i < segmentLengths.length; i++) {
     const segLen = segmentLengths[i]
     if (accumulated + segLen >= targetDist) {
-      const segFraction = (targetDist - accumulated) / segLen
+      const segFraction = segLen > 0 ? (targetDist - accumulated) / segLen : 0
       return {
         x: points[i].x + (points[i + 1].x - points[i].x) * segFraction,
         y: points[i].y + (points[i + 1].y - points[i].y) * segFraction,

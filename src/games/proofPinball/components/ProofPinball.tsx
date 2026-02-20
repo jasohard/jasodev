@@ -247,7 +247,7 @@ export default function ProofPinball() {
             const segLen = Math.sqrt(dx * dx + dy * dy)
 
             if (accumulated + segLen >= targetDist) {
-              const frac = (targetDist - accumulated) / segLen
+              const frac = segLen > 0 ? (targetDist - accumulated) / segLen : 0
               trailPoints.push({
                 x: currentPath.points[i - 1].x + dx * frac,
                 y: currentPath.points[i - 1].y + dy * frac,

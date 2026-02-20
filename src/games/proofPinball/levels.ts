@@ -83,14 +83,21 @@ export const LEVELS: LevelConfig[] = [
     id: 4,
     name: 'Triangle Room',
     subtitle: '60-degree angles everywhere',
-    walls: [
-      // Equilateral triangle (approximately)
-      { id: 'tri-bottom', start: { x: 60, y: 460 }, end: { x: 340, y: 460 } },
-      { id: 'tri-right', start: { x: 340, y: 460 }, end: { x: 200, y: 120 } },
-      { id: 'tri-left', start: { x: 200, y: 120 }, end: { x: 60, y: 460 } },
-    ],
+    walls: (() => {
+      // True equilateral triangle: base = 280, height = 280 * √3/2 ≈ 242
+      const base = 280
+      const height = Math.round(base * Math.sqrt(3) / 2)
+      const cx = 200
+      const bottomY = 460
+      const topY = bottomY - height
+      return [
+        { id: 'tri-bottom', start: { x: cx - base / 2, y: bottomY }, end: { x: cx + base / 2, y: bottomY } },
+        { id: 'tri-right', start: { x: cx + base / 2, y: bottomY }, end: { x: cx, y: topY } },
+        { id: 'tri-left', start: { x: cx, y: topY }, end: { x: cx - base / 2, y: bottomY } },
+      ]
+    })(),
     targets: [
-      { id: 't1', center: { x: 310, y: 400 }, radius: 20, hit: false },
+      { id: 't1', center: { x: 300, y: 400 }, radius: 20, hit: false },
     ],
     reflectors: [],
     launchPoint: { x: 100, y: 430 },

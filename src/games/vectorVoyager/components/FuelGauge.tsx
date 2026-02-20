@@ -14,10 +14,11 @@ const GAUGE_Y = 14
 function FuelGaugeComponent({ fuelUsed, fuelBudget }: FuelGaugeProps) {
   if (fuelBudget <= 0) return null
 
-  const pct = Math.min(1, fuelUsed / fuelBudget)
+  const rawPct = fuelUsed / fuelBudget
+  const pct = Math.min(1, rawPct)
   const remaining = 1 - pct
-  const isOver = pct > 1
-  const isLow = pct > 0.75
+  const isOver = rawPct > 1
+  const isLow = rawPct > 0.75
 
   let fillColor: string
   if (isOver) fillColor = '#f44336'

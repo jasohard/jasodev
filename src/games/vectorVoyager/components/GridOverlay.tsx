@@ -1,10 +1,10 @@
-import { memo } from 'react'
+import React, { memo } from 'react'
 import { BOARD_WIDTH, BOARD_HEIGHT } from '../engine'
 
 const GRID_STEP = 40
 
 function GridOverlayComponent() {
-  const lines: JSX.Element[] = []
+  const lines: React.ReactElement[] = []
   // Vertical lines
   for (let x = GRID_STEP; x < BOARD_WIDTH; x += GRID_STEP) {
     lines.push(

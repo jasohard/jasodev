@@ -112,7 +112,7 @@ export function computeMatchScore(
 export function calculateStars(
   score: number,
   thresholds: [number, number, number]
-): number {
+): 0 | 1 | 2 | 3 {
   if (score >= thresholds[2]) return 3
   if (score >= thresholds[1]) return 2
   if (score >= thresholds[0]) return 1
@@ -154,10 +154,13 @@ function formatNum(n: number): string {
 }
 
 function formatPhase(phase: number): string {
+  // Guard against non-finite values to prevent infinite loops
+  if (!Number.isFinite(phase)) return ''
+
   // Normalize to [-π, π]
-  let p = phase
-  while (p > Math.PI) p -= 2 * Math.PI
-  while (p < -Math.PI) p += 2 * Math.PI
+  let p = phase % (2 * Math.PI)
+  if (p > Math.PI) p -= 2 * Math.PI
+  if (p < -Math.PI) p += 2 * Math.PI
 
   if (Math.abs(p) < 0.05) return ''
 
