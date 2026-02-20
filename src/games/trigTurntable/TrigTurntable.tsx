@@ -44,6 +44,8 @@ export default function TrigTurntable() {
   const svgRef = useRef<SVGSVGElement>(null)
   const animRef = useRef<number>(0)
   const lastTimeRef = useRef<number>(0)
+  const timeRef = useRef<number>(0)
+  const speedRef = useRef<number>(1)
 
   const {
     level, circles, selectedCircleIndex, time, isPlaying,
@@ -51,6 +53,10 @@ export default function TrigTurntable() {
   } = state
 
   const selectedCircle = circles[selectedCircleIndex]
+
+  // Keep refs in sync with state
+  timeRef.current = time
+  speedRef.current = speed
 
   // ── Animation loop ──────────────────────────────
   useEffect(() => {
@@ -61,14 +67,14 @@ export default function TrigTurntable() {
     const animate = (now: number) => {
       const dt = (now - lastTimeRef.current) / 1000
       lastTimeRef.current = now
-      const newTime = state.time + dt * speed * 2 // Base speed: 2 rad/s
+      const newTime = timeRef.current + dt * speedRef.current * 2 // Base speed: 2 rad/s
       dispatch({ type: 'UPDATE_TIME', time: newTime })
       animRef.current = requestAnimationFrame(animate)
     }
 
     animRef.current = requestAnimationFrame(animate)
     return () => cancelAnimationFrame(animRef.current)
-  }, [isPlaying, phase, speed, state.time])
+  }, [isPlaying, phase])
 
   // ── Score computation (throttled) ───────────────
   useEffect(() => {
@@ -322,13 +328,17 @@ export default function TrigTurntable() {
             {/* Background */}
             <rect width={VB_W} height={VB_H} fill="#0d1117" />
 
+            {/* Radial glow behind epicycle area */}
+            <circle cx={CIRCLE_CX} cy={CIRCLE_CY} r={120} fill="none" opacity="0.06">
+              <animate attributeName="r" values="110;130;110" dur="4s" repeatCount="indefinite" />
+            </circle>
+            <circle cx={CIRCLE_CX} cy={CIRCLE_CY} r={100} fill={selectedCircle?.color ?? '#4fc3f7'} opacity="0.03" />
+
             {/* Subtle grid */}
-            <g opacity="0.08">
-              {/* Circle area grid */}
-              <line x1={CIRCLE_CX} y1={30} x2={CIRCLE_CX} y2={330} stroke="#fff" strokeWidth="0.5" />
+            <g opacity="0.06">
+              {/* Circle area crosshairs */}
+              <line x1={CIRCLE_CX} y1={40} x2={CIRCLE_CX} y2={320} stroke="#fff" strokeWidth="0.5" />
               <line x1={30} y1={CIRCLE_CY} x2={230} y2={CIRCLE_CY} stroke="#fff" strokeWidth="0.5" />
-              {/* Wave area grid */}
-              <line x1={WAVE_X_START} y1={WAVE_Y_CENTER} x2={WAVE_X_END} y2={WAVE_Y_CENTER} stroke="#fff" strokeWidth="0.5" />
             </g>
 
             {/* Wave area axis */}
@@ -364,7 +374,12 @@ export default function TrigTurntable() {
               />
             )}
 
-            {/* Player wave */}
+            {/* Individual wave traces per circle (faded) */}
+            {circles.length > 1 && circles.map((c, i) => (
+              <IndividualWave key={c.id} circle={c} opacity={i === selectedCircleIndex ? 0.3 : 0.15} />
+            ))}
+
+            {/* Player wave (combined) */}
             <polyline
               points={playerWavePath}
               fill="none"
@@ -434,6 +449,9 @@ export default function TrigTurntable() {
               )
             })}
 
+            {/* Epicycle tip trailing path (spirograph-like) */}
+            <EpicycleTrail circles={circles} time={time} cx={CIRCLE_CX} cy={CIRCLE_CY} />
+
             {/* Connection line from final tip to wave */}
             <line
               x1={epicycleData.x}
@@ -443,10 +461,22 @@ export default function TrigTurntable() {
               stroke={selectedCircle?.color ?? '#4fc3f7'}
               strokeWidth="1"
               strokeDasharray="4 4"
-              opacity="0.5"
+              opacity="0.4"
             />
 
-            {/* Animated dot on wave at current time position */}
+            {/* Horizontal bar on the connection line at the wave Y position */}
+            <line
+              x1={WAVE_X_START - 2}
+              y1={connectionLineY}
+              x2={WAVE_X_START + 6}
+              y2={connectionLineY}
+              stroke={selectedCircle?.color ?? '#4fc3f7'}
+              strokeWidth="3"
+              strokeLinecap="round"
+              opacity="0.7"
+            />
+
+            {/* Animated dot on wave at the connection point */}
             <circle
               cx={WAVE_X_START + 4}
               cy={connectionLineY}
@@ -668,6 +698,80 @@ export default function TrigTurntable() {
 }
 
 // ── Sub-components ──────────────────────────────
+
+/**
+ * Renders a single circle's wave contribution as a faded trace.
+ */
+function IndividualWave({ circle, opacity }: { circle: CircleParams; opacity: number }) {
+  const points = useMemo(() => {
+    const pts: string[] = []
+    for (let i = 0; i < 200; i++) {
+      const frac = i / 199
+      const x = WAVE_X_START + frac * (WAVE_X_END - WAVE_X_START)
+      const t = frac * 4 * Math.PI
+      const y = WAVE_Y_CENTER - circle.amplitude * Math.sin(circle.frequency * t + circle.phase) * WAVE_Y_SCALE
+      pts.push(`${x.toFixed(1)},${y.toFixed(1)}`)
+    }
+    return pts.join(' ')
+  }, [circle])
+
+  return (
+    <polyline
+      points={points}
+      fill="none"
+      stroke={circle.color}
+      strokeWidth="1"
+      opacity={opacity}
+      strokeLinejoin="round"
+      clipPath="url(#wave-clip)"
+    />
+  )
+}
+
+/**
+ * Renders a fading trail behind the final epicycle tip.
+ * Creates a spirograph-like visual that shows the epicycle path.
+ */
+function EpicycleTrail({
+  circles,
+  time,
+  cx,
+  cy,
+}: {
+  circles: CircleParams[]
+  time: number
+  cx: number
+  cy: number
+}) {
+  const trailPoints = useMemo(() => {
+    const numTrailPoints = 80
+    const trailDuration = 3 // seconds of trail history
+    const pts: string[] = []
+
+    for (let i = 0; i < numTrailPoints; i++) {
+      const frac = i / (numTrailPoints - 1)
+      const t = time - trailDuration * (1 - frac)
+      const tip = computeEpicycleTip(circles, t, cx, cy)
+      pts.push(`${tip.x.toFixed(1)},${tip.y.toFixed(1)}`)
+    }
+    return pts.join(' ')
+  }, [circles, time, cx, cy])
+
+  const lastCircle = circles[circles.length - 1]
+  const color = lastCircle?.color ?? '#4fc3f7'
+
+  return (
+    <polyline
+      points={trailPoints}
+      fill="none"
+      stroke={color}
+      strokeWidth="1.5"
+      opacity="0.25"
+      strokeLinejoin="round"
+      strokeLinecap="round"
+    />
+  )
+}
 
 /**
  * Renders translucent shading between player wave and target wave
