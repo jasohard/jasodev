@@ -5,7 +5,7 @@
  * bouncing off walls with angle-of-reflection physics.
  */
 
-import { useReducer, useCallback, useRef, useEffect, useState } from 'react'
+import { useReducer, useCallback, useRef, useEffect, useState, useMemo } from 'react'
 import { gameReducer, initializeLevel } from '../gameState'
 import { computeBallPath, computePredictionPath, interpolatePath, pathLength, directionFromAngle, radToDeg } from '../physics'
 import { LEVELS } from '../levels'
@@ -110,21 +110,27 @@ export default function ProofPinball() {
     [isAiming, phase, level.launchPoint, svgPoint, selectedReflectorId, reflectors]
   )
 
-  const handlePointerUp = useCallback(() => {
-    if (isAiming && phase === 'aiming') {
-      // Fire the shot
-      const path = computeBallPath(
-        level.launchPoint,
-        aimAngle,
-        level.walls,
-        reflectors,
-        targets,
-        level.maxBounces
-      )
-      announcedTargetsRef.current = new Set()
-      dispatch({ type: 'FIRE_SHOT', path })
-    }
-  }, [isAiming, phase, aimAngle, level, reflectors, targets])
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      // Release pointer capture to avoid stuck input states
+      svgRef.current?.releasePointerCapture(e.pointerId)
+
+      if (isAiming && phase === 'aiming') {
+        // Fire the shot
+        const path = computeBallPath(
+          level.launchPoint,
+          aimAngle,
+          level.walls,
+          reflectors,
+          targets,
+          level.maxBounces
+        )
+        announcedTargetsRef.current = new Set()
+        dispatch({ type: 'FIRE_SHOT', path })
+      }
+    },
+    [isAiming, phase, aimAngle, level, reflectors, targets, dispatch]
+  )
 
   // ── Ball animation ───────────────────────────────────
   useEffect(() => {
@@ -177,6 +183,18 @@ export default function ProofPinball() {
   useEffect(() => {
     setShowHint(true)
   }, [level.id])
+
+  // ── Memoized wall vertices ────────────────────────────
+  const wallVertices = useMemo(() => {
+    const vertices = new Map<string, Vec2>()
+    for (const wall of level.walls) {
+      const sk = `${Math.round(wall.start.x)},${Math.round(wall.start.y)}`
+      const ek = `${Math.round(wall.end.x)},${Math.round(wall.end.y)}`
+      vertices.set(sk, wall.start)
+      vertices.set(ek, wall.end)
+    }
+    return Array.from(vertices.entries())
+  }, [level.walls])
 
   // ── Prediction path ──────────────────────────────────
   const predictionPath =
@@ -394,18 +412,9 @@ export default function ProofPinball() {
             />
           ))}
           {/* Wall corner vertices */}
-          {(() => {
-            const vertices = new Map<string, Vec2>()
-            for (const wall of level.walls) {
-              const sk = `${Math.round(wall.start.x)},${Math.round(wall.start.y)}`
-              const ek = `${Math.round(wall.end.x)},${Math.round(wall.end.y)}`
-              vertices.set(sk, wall.start)
-              vertices.set(ek, wall.end)
-            }
-            return Array.from(vertices.entries()).map(([key, v]) => (
-              <circle key={`v-${key}`} cx={v.x} cy={v.y} r={3} fill="#fff" opacity="0.6" />
-            ))
-          })()}
+          {wallVertices.map(([key, v]) => (
+            <circle key={`v-${key}`} cx={v.x} cy={v.y} r={3} fill="#fff" opacity="0.6" />
+          ))}
 
           {/* Reflectors */}
           {reflectors.map((ref) => {
