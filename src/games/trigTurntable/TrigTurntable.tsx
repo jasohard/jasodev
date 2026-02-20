@@ -152,7 +152,7 @@ export default function TrigTurntable() {
       }
     }
 
-    if (isDraggingPhase) {
+    if (isDraggingPhase && selectedCircle) {
       const dx = pt.x - parentTip.x
       const dy = pt.y - parentTip.y
       // Compute angle (remember SVG y is flipped for math convention)
@@ -508,6 +508,7 @@ export default function TrigTurntable() {
                 stroke={selectedCircle?.color ?? '#4fc3f7'}
                 strokeWidth="2"
                 opacity="0.6"
+                pointerEvents="none"
               >
                 <animate attributeName="r" from="12" to="22" dur="0.8s" repeatCount="indefinite" />
                 <animate attributeName="opacity" from="0.6" to="0" dur="0.8s" repeatCount="indefinite" />

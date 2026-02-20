@@ -156,8 +156,8 @@
 .hintDismiss {
   margin-left: var(--space-sm);
   color: rgba(0, 188, 212, 0.6);
-  min-height: 32px;
-  min-width: 32px;
+  min-height: var(--tap-target-min);
+  min-width: var(--tap-target-min);
   font-size: 0.8rem;
 }
 

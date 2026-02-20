@@ -34,7 +34,9 @@ export default function ProbSlider({ peg, totalRows, onProbChange, onClose }: Pr
       const pt = svg.createSVGPoint()
       pt.x = clientX
       pt.y = 0
-      const svgPt = pt.matrixTransform(svg.getScreenCTM()?.inverse())
+      const ctm = svg.getScreenCTM()
+      if (!ctm) return peg.leftProb
+      const svgPt = pt.matrixTransform(ctm.inverse())
       const rawProb = (svgPt.x - sliderX) / SLIDER_WIDTH
       // Snap to nearest 5%
       const snapped = Math.round(rawProb * 20) / 20
