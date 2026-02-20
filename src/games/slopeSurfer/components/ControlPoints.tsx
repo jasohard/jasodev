@@ -17,12 +17,16 @@ function ControlPointsComponent({ points, enabled, onDrag, svgRef }: ControlPoin
   const draggingId = useRef<number | null>(null)
 
   const pointerToSVG = useCallback((e: React.PointerEvent): number => {
-    const svg = svgRef.current
-    if (!svg || !svg.getScreenCTM) return 0
-    const ctm = svg.getScreenCTM()
-    if (!ctm) return 0
-    const inv = ctm.inverse()
-    return e.clientX * inv.b + e.clientY * inv.d + inv.f
+    try {
+      const svg = svgRef.current
+      if (!svg || !svg.getScreenCTM) return 0
+      const ctm = svg.getScreenCTM()
+      if (!ctm) return 0
+      const inv = ctm.inverse()
+      return e.clientX * inv.b + e.clientY * inv.d + inv.f
+    } catch {
+      return 0
+    }
   }, [svgRef])
 
   const handlePointerDown = useCallback((e: React.PointerEvent, id: number) => {
