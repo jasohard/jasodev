@@ -2,11 +2,11 @@ import { memo } from 'react'
 
 interface HUDProps {
   stars: 0 | 1 | 2 | 3
-  vectorCount: number
-  par: number
+  wellCount: number
+  wellPar: number
 }
 
-function HUDComponent({ stars, vectorCount, par }: HUDProps) {
+function HUDComponent({ stars, wellCount, wellPar }: HUDProps) {
   return (
     <g>
       {/* Stars */}
@@ -23,7 +23,7 @@ function HUDComponent({ stars, vectorCount, par }: HUDProps) {
         </text>
       ))}
 
-      {/* Vector count / par */}
+      {/* Well count / par */}
       <text
         x={80}
         y={22}
@@ -31,7 +31,7 @@ function HUDComponent({ stars, vectorCount, par }: HUDProps) {
         fontSize={10}
         fontFamily="monospace"
       >
-        Vectors: {vectorCount} / Par: {par}
+        Wells: {wellCount} / Par: {wellPar}
       </text>
     </g>
   )

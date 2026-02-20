@@ -26,7 +26,7 @@ export default function HomePage() {
         <GameCard
           to="/vectors"
           title="Vector Voyager"
-          description="Plan a spaceship's course by drawing vectors. Navigate around asteroids, thread narrow gaps, and feel like a mathematical pilot."
+          description="Launch a ship and place gravity wells to bend its path around asteroids. A physics puzzle where you harness gravitational pull to reach the target."
           thumbnail={<VectorThumbnail />}
         />
         <GameCard

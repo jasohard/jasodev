@@ -1,24 +1,23 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import type { GameVector, Vec2, GamePhase, TrailParticle } from './types'
+import type { LaunchVector, Vec2, GamePhase, TrailParticle, GravityWell } from './types'
 import { LEVELS } from './levels'
 import {
   BOARD_WIDTH,
   BOARD_HEIGHT,
   vecSub,
   vecLen,
-  vecAdd,
   vecNormalize,
-  totalFuelUsed,
-  checkCollisions,
-  reachesTarget,
+  simulateTrajectory,
   computeStars,
+  maxWells,
+  isTooClose,
 } from './engine'
 import GameBoard from './components/GameBoard'
 import Controls from './components/Controls'
 import LevelSelect from './components/LevelSelect'
 import styles from './VectorVoyager.module.css'
 
-let vectorIdCounter = 0
+let wellIdCounter = 0
 let trailIdCounter = 0
 
 export default function VectorVoyager() {
@@ -27,33 +26,33 @@ export default function VectorVoyager() {
 
   const level = LEVELS.find((l) => l.id === currentLevelId) ?? LEVELS[0]
 
-  const [vectors, setVectors] = useState<GameVector[]>([])
+  // ─── Game state ──────────────────────────────────────────────
+  const [launch, setLaunch] = useState<LaunchVector | null>(null)
+  const [wells, setWells] = useState<GravityWell[]>([])
+  const [selectedWellId, setSelectedWellId] = useState<number | null>(null)
   const [phase, setPhase] = useState<GamePhase>('planning')
   const [shipPos, setShipPos] = useState<Vec2>(level.shipStart)
   const [shipAngle, setShipAngle] = useState(0)
   const [trail, setTrail] = useState<TrailParticle[]>([])
   const [explosionParticles, setExplosionParticles] = useState<Vec2[]>([])
   const [victoryParticles, setVictoryParticles] = useState<Vec2[]>([])
-  const [draggingIdx, setDraggingIdx] = useState(-1)
+  const [isDraggingLaunch, setIsDraggingLaunch] = useState(false)
 
-  // Drag state tracked via refs (for pointerMove handler perf)
-  const isDragging = useRef(false)
-  const dragMode = useRef<'new' | 'adjust'>('new')
-  const dragVectorIdxRef = useRef(-1)
+  // Drag refs for performance
+  const dragging = useRef(false)
+  const dragType = useRef<'launch' | 'well-drag' | null>(null)
+  const dragWellIdRef = useRef<number | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
-
   const animFrameRef = useRef(0)
 
-  // Derived state
-  const fuelUsed = totalFuelUsed(vectors)
-  const overBudget = level.fuelBudget > 0 && fuelUsed > level.fuelBudget
-  const collision = vectors.length > 0 ? checkCollisions(vectors, level.asteroids) : { hit: false as const }
-  const canLaunch = vectors.length > 0 && !collision.hit
+  // Derived
+  const mw = maxWells(level.wellPar)
+  const hasLaunch = launch !== null && vecLen(vecSub(launch.end, launch.start)) > 8
 
   // Stars computed after success
   const stars: 0 | 1 | 2 | 3 =
     phase === 'success'
-      ? computeStars(true, vectors.length, level.par, fuelUsed, level.fuelBudget)
+      ? computeStars(true, wells.length, level.wellPar)
       : 0
 
   // Update best stars
@@ -69,12 +68,10 @@ export default function VectorVoyager() {
   // Set page title
   useEffect(() => {
     document.title = `Vector Voyager - ${level.name} | jasodev`
-    return () => {
-      document.title = 'jasodev'
-    }
+    return () => { document.title = 'jasodev' }
   }, [level.name])
 
-  // ─── Pointer → SVG coordinate conversion ─────────────────────
+  // ─── Pointer → SVG coordinate conversion ────────────────────
 
   const pointerToSVG = useCallback((e: React.PointerEvent): Vec2 => {
     const svg = svgRef.current ?? (e.currentTarget as SVGSVGElement)
@@ -88,7 +85,6 @@ export default function VectorVoyager() {
     }
   }, [])
 
-  // Clamp point inside board bounds with margin
   const clamp = useCallback((p: Vec2): Vec2 => {
     const m = 6
     return {
@@ -97,12 +93,12 @@ export default function VectorVoyager() {
     }
   }, [])
 
-  // ─── Drag handlers ────────────────────────────────────────────
+  // ─── Pointer handlers ──────────────────────────────────────────
 
-  const handleDragStart = useCallback(
+  const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (phase !== 'planning') return
-      // Save SVG ref from the event's closest SVG
+
       const targetEl = e.target as Element | null
       if (!targetEl) return
       const svg = targetEl.closest?.('svg') as SVGSVGElement | null
@@ -111,182 +107,166 @@ export default function VectorVoyager() {
 
       const pt = pointerToSVG(e)
 
-      // Check if tapping on an existing arrowhead handle
-      const handleAttr = targetEl.getAttribute?.('data-vector-handle')
-      if (handleAttr !== null && handleAttr !== undefined) {
-        const idx = parseInt(handleAttr, 10)
-        if (!isNaN(idx) && idx >= 0 && idx < vectors.length) {
-          isDragging.current = true
-          dragMode.current = 'adjust'
-          dragVectorIdxRef.current = idx
-          setDraggingIdx(idx)
+      // Check if tapping on the launch vector arrowhead
+      const handleAttr = targetEl.getAttribute?.('data-launch-handle')
+      if (handleAttr === 'true' && launch) {
+        dragging.current = true
+        dragType.current = 'launch'
+        setIsDraggingLaunch(true)
+        return
+      }
+
+      // Check if dragging from the ship to create/adjust launch vector
+      const distToShip = vecLen(vecSub(pt, level.shipStart))
+      if (distToShip < 40 || (!launch && distToShip < 60)) {
+        dragging.current = true
+        dragType.current = 'launch'
+        setLaunch({ start: level.shipStart, end: clamp(pt) })
+        setIsDraggingLaunch(true)
+        setSelectedWellId(null)
+        return
+      }
+
+      // Otherwise: place a gravity well (if not at max)
+      if (wells.length < mw) {
+        const tooClose = isTooClose(
+          pt, level.asteroids, level.shipStart,
+          level.target, level.targetRadius, wells
+        )
+        if (!tooClose) {
+          const newWell: GravityWell = {
+            id: wellIdCounter++,
+            x: pt.x,
+            y: pt.y,
+            strength: 2,
+          }
+          setWells((prev) => [...prev, newWell])
+          setSelectedWellId(newWell.id)
+          dragging.current = true
+          dragType.current = 'well-drag'
+          dragWellIdRef.current = newWell.id
           return
         }
       }
 
-      // Otherwise, create a new vector from the chain endpoint
-      const startPt =
-        vectors.length > 0 ? vectors[vectors.length - 1].end : level.shipStart
-      const dist = vecLen(vecSub(pt, startPt))
-      if (dist > 60) return // too far from endpoint — ignore
-
-      const newVec: GameVector = {
-        id: vectorIdCounter++,
-        start: startPt,
-        end: clamp(pt),
-      }
-      setVectors((prev) => [...prev, newVec])
-      isDragging.current = true
-      dragMode.current = 'new'
-      dragVectorIdxRef.current = -1
-      setDraggingIdx(-1)
+      // Deselect well if tapping empty space
+      setSelectedWellId(null)
     },
-    [phase, vectors, level.shipStart, pointerToSVG, clamp]
+    [phase, launch, wells, level, mw, pointerToSVG, clamp]
   )
 
-  const handleDragMove = useCallback(
+  const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (!isDragging.current) return
+      if (!dragging.current) return
       const pt = clamp(pointerToSVG(e))
 
-      if (dragMode.current === 'new') {
-        setVectors((prev) => {
-          const next = [...prev]
-          const last = next[next.length - 1]
-          if (last) {
-            next[next.length - 1] = { ...last, end: pt }
-          }
-          return next
-        })
-      } else if (dragMode.current === 'adjust') {
-        const idx = dragVectorIdxRef.current
-        setVectors((prev) => {
-          const next = [...prev]
-          if (next[idx]) {
-            next[idx] = { ...next[idx], end: pt }
-            // Cascade: update start points of subsequent vectors in chain
-            for (let i = idx + 1; i < next.length; i++) {
-              const delta = vecSub(prev[i].end, prev[i].start)
-              next[i] = {
-                ...next[i],
-                start: next[i - 1].end,
-                end: vecAdd(next[i - 1].end, delta),
-              }
-            }
-          }
-          return next
-        })
+      if (dragType.current === 'launch') {
+        setLaunch({ start: level.shipStart, end: pt })
+      } else if (dragType.current === 'well-drag' && dragWellIdRef.current !== null) {
+        const wellId = dragWellIdRef.current
+        setWells((prev) =>
+          prev.map((w) => w.id === wellId ? { ...w, x: pt.x, y: pt.y } : w)
+        )
       }
     },
-    [pointerToSVG, clamp]
+    [pointerToSVG, clamp, level.shipStart]
   )
 
-  const handleDragEnd = useCallback(() => {
-    if (!isDragging.current) return
-    isDragging.current = false
-    setDraggingIdx(-1)
+  const handlePointerUp = useCallback(() => {
+    if (!dragging.current) return
+    dragging.current = false
+    dragType.current = null
+    dragWellIdRef.current = null
+    setIsDraggingLaunch(false)
 
-    // Remove vectors that are too tiny (accidental taps)
-    setVectors((prev) => {
-      const last = prev[prev.length - 1]
-      if (last && vecLen(vecSub(last.end, last.start)) < 8) {
-        return prev.slice(0, -1)
-      }
+    // Remove too-short launch vector
+    setLaunch((prev) => {
+      if (prev && vecLen(vecSub(prev.end, prev.start)) < 8) return null
       return prev
     })
   }, [])
 
-  // ─── Launch animation ─────────────────────────────────────────
+  // ─── Well interaction ────────────────────────────────────────
+
+  const handleSelectWell = useCallback((id: number) => {
+    if (phase !== 'planning') return
+    setSelectedWellId((prev) => (prev === id ? null : id))
+  }, [phase])
+
+  const handleRemoveWell = useCallback(() => {
+    if (selectedWellId === null) return
+    setWells((prev) => prev.filter((w) => w.id !== selectedWellId))
+    setSelectedWellId(null)
+  }, [selectedWellId])
+
+  const handleAdjustWellStrength = useCallback((delta: number) => {
+    if (selectedWellId === null) return
+    setWells((prev) =>
+      prev.map((w) =>
+        w.id === selectedWellId
+          ? { ...w, strength: Math.max(1, Math.min(5, w.strength + delta)) }
+          : w
+      )
+    )
+  }, [selectedWellId])
+
+  // ─── Launch animation ──────────────────────────────────────
 
   const handleLaunch = useCallback(() => {
-    if (vectors.length === 0 || overBudget) return
+    if (!launch || !hasLaunch) return
 
-    const col = checkCollisions(vectors, level.asteroids)
+    const sim = simulateTrajectory(
+      launch, wells, level.asteroids, level.target, level.targetRadius
+    )
 
     setPhase('launching')
     setTrail([])
     setExplosionParticles([])
     setVictoryParticles([])
+    setSelectedWellId(null)
 
-    const startTime = performance.now()
-    const SPEED = 180 // pixels per second
-
-    // Compute segment durations
-    const segDurations = vectors.map((v) =>
-      vecLen(vecSub(v.end, v.start)) / SPEED
-    )
-
-    // If there's a collision, truncate the colliding segment
-    let totalDur = segDurations.reduce((a, b) => a + b, 0)
-    if (col.hit) {
-      const origDur = segDurations[col.vectorIdx]
-      segDurations[col.vectorIdx] = origDur * col.t
-      totalDur = segDurations
-        .slice(0, col.vectorIdx + 1)
-        .reduce((a, b) => a + b, 0)
+    const path = sim.path
+    const totalSteps = sim.endIdx
+    if (totalSteps <= 0) {
+      setPhase('missed')
+      return
     }
 
-    // Ensure minimum duration
-    totalDur = Math.max(totalDur, 0.2)
-
+    const ANIM_SPEED = 4 // steps per frame at 60fps
+    let currentStep = 0
     let trailParticles: TrailParticle[] = []
-    let lastTrailTime = 0
+    let frameCount = 0
 
-    const animate = (now: number) => {
-      const elapsed = (now - startTime) / 1000
-
-      // Find which segment and progress
-      let remaining = elapsed
-      let segIdx = 0
-      let segT = 0
-      const maxSeg = col.hit ? col.vectorIdx + 1 : vectors.length
-
-      for (segIdx = 0; segIdx < maxSeg; segIdx++) {
-        const dur = segDurations[segIdx]
-        if (dur <= 0) continue
-        if (remaining <= dur) {
-          segT = remaining / dur
-          break
-        }
-        remaining -= dur
-        if (segIdx === maxSeg - 1) segT = 1
-      }
-      segIdx = Math.min(segIdx, maxSeg - 1)
-
-      // Ease-in-out per segment
-      const eased =
-        segT < 0.5
-          ? 2 * segT * segT
-          : 1 - Math.pow(-2 * segT + 2, 2) / 2
-
-      const v = vectors[segIdx]
-      if (!v) {
+    const animate = () => {
+      currentStep = Math.min(currentStep + ANIM_SPEED, totalSteps)
+      const pos = path[currentStep]
+      if (!pos) {
         setPhase('missed')
         return
       }
 
-      const d = vecSub(v.end, v.start)
-      const pos: Vec2 = {
-        x: v.start.x + d.x * eased,
-        y: v.start.y + d.y * eased,
-      }
+      // Compute angle from velocity direction
+      const nextIdx = Math.min(currentStep + 2, totalSteps)
+      const next = path[nextIdx] ?? pos
+      const dx = next.x - pos.x
+      const dy = next.y - pos.y
+      const angle = Math.atan2(-dy, dx)
 
-      const angle = Math.atan2(-d.y, d.x)
       setShipPos(pos)
       setShipAngle(angle)
 
-      // Engine trail particles
-      if (now - lastTrailTime > 35) {
-        lastTrailTime = now
-        const norm = vecNormalize(d)
+      // Engine trail
+      frameCount++
+      if (frameCount % 2 === 0) {
+        const norm = vecNormalize({ x: dx, y: dy })
         trailParticles = [
           ...trailParticles
             .filter((p) => p.opacity > 0.05)
             .map((p) => ({ ...p, opacity: p.opacity * 0.82 }))
-            .slice(-40), // Cap trail length to prevent unbounded growth
+            .slice(-40),
           {
-            x: pos.x - norm.x * 10 + (Math.random() - 0.5) * 5,
-            y: pos.y + norm.y * 10 + (Math.random() - 0.5) * 5,
+            x: pos.x - norm.x * 8 + (Math.random() - 0.5) * 5,
+            y: pos.y + norm.y * 8 + (Math.random() - 0.5) * 5,
             opacity: 1,
             id: trailIdCounter++,
           },
@@ -294,29 +274,23 @@ export default function VectorVoyager() {
         setTrail([...trailParticles])
       }
 
-      // Animation end
-      if (elapsed >= totalDur) {
-        if (col.hit) {
+      // Done?
+      if (currentStep >= totalSteps) {
+        if (sim.hitAsteroid) {
           const particles: Vec2[] = []
           for (let i = 0; i < 12; i++) {
             const a = (Math.PI * 2 * i) / 12
             const dist = 8 + Math.random() * 22
-            particles.push({
-              x: pos.x + Math.cos(a) * dist,
-              y: pos.y + Math.sin(a) * dist,
-            })
+            particles.push({ x: pos.x + Math.cos(a) * dist, y: pos.y + Math.sin(a) * dist })
           }
           setExplosionParticles(particles)
           setPhase('collision')
-        } else if (reachesTarget(vectors, level.target, level.targetRadius)) {
+        } else if (sim.reachedTarget) {
           const particles: Vec2[] = []
           for (let i = 0; i < 14; i++) {
             const a = (Math.PI * 2 * i) / 14
             const dist = 8 + Math.random() * 30
-            particles.push({
-              x: level.target.x + Math.cos(a) * dist,
-              y: level.target.y + Math.sin(a) * dist,
-            })
+            particles.push({ x: level.target.x + Math.cos(a) * dist, y: level.target.y + Math.sin(a) * dist })
           }
           setVictoryParticles(particles)
           setPhase('success')
@@ -330,33 +304,27 @@ export default function VectorVoyager() {
     }
 
     animFrameRef.current = requestAnimationFrame(animate)
-  }, [vectors, level, overBudget])
+  }, [launch, hasLaunch, wells, level])
 
-  // ─── Clear / Undo / Level change ──────────────────────────────
+  // ─── Reset / level change ──────────────────────────────────
 
-  const resetState = useCallback(
-    (start: Vec2) => {
-      cancelAnimationFrame(animFrameRef.current)
-      setVectors([])
-      setPhase('planning')
-      setShipPos(start)
-      setShipAngle(0)
-      setTrail([])
-      setExplosionParticles([])
-      setVictoryParticles([])
-      setDraggingIdx(-1)
-    },
-    []
-  )
+  const resetState = useCallback((start: Vec2) => {
+    cancelAnimationFrame(animFrameRef.current)
+    setLaunch(null)
+    setWells([])
+    setSelectedWellId(null)
+    setPhase('planning')
+    setShipPos(start)
+    setShipAngle(0)
+    setTrail([])
+    setExplosionParticles([])
+    setVictoryParticles([])
+    setIsDraggingLaunch(false)
+  }, [])
 
   const handleClear = useCallback(() => {
     resetState(level.shipStart)
   }, [level.shipStart, resetState])
-
-  const handleUndo = useCallback(() => {
-    if (phase !== 'planning' || vectors.length === 0) return
-    setVectors((prev) => prev.slice(0, -1))
-  }, [phase, vectors.length])
 
   const handleLevelChange = useCallback(
     (levelId: number) => {
@@ -375,9 +343,7 @@ export default function VectorVoyager() {
 
   // Cleanup on unmount
   useEffect(() => {
-    return () => {
-      cancelAnimationFrame(animFrameRef.current)
-    }
+    return () => { cancelAnimationFrame(animFrameRef.current) }
   }, [])
 
   return (
@@ -395,16 +361,19 @@ export default function VectorVoyager() {
       <div className={styles.boardWrapper}>
         <GameBoard
           level={level}
-          vectors={vectors}
+          launch={launch}
+          wells={wells}
           phase={phase}
           stars={stars}
           shipPos={shipPos}
           shipAngle={shipAngle}
           trail={trail}
-          draggingIdx={draggingIdx}
-          onDragStart={handleDragStart}
-          onDragMove={handleDragMove}
-          onDragEnd={handleDragEnd}
+          isDraggingLaunch={isDraggingLaunch}
+          selectedWellId={selectedWellId}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onSelectWell={handleSelectWell}
           explosionParticles={explosionParticles}
           victoryParticles={victoryParticles}
         />
@@ -412,13 +381,13 @@ export default function VectorVoyager() {
 
       <Controls
         phase={phase}
-        vectorCount={vectors.length}
-        canLaunch={canLaunch}
-        overBudget={overBudget}
+        canLaunch={hasLaunch}
+        hasSelectedWell={selectedWellId !== null}
         hasNextLevel={hasNextLevel}
         onLaunch={handleLaunch}
         onClear={handleClear}
-        onUndo={handleUndo}
+        onRemoveWell={handleRemoveWell}
+        onAdjustWellStrength={handleAdjustWellStrength}
         onNextLevel={handleNextLevel}
       />
 

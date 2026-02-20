@@ -1,12 +1,29 @@
 /**
- * Vector Voyager game engine — geometry, collision, scoring.
+ * Vector Voyager game engine — gravity simulation, collision, trajectory.
  */
-import type { Vec2, GameVector, Asteroid } from './types'
+import type { Vec2, LaunchVector, Asteroid, GravityWell } from './types'
 
 // ─── Board geometry ──────────────────────────────────────────────
 
 export const BOARD_WIDTH = 440
 export const BOARD_HEIGHT = 440
+
+// ─── Physics constants ───────────────────────────────────────────
+
+/** Gravitational constant (tunable) */
+const G = 8000
+/** Minimum distance to prevent singularity at well center */
+const MIN_DIST = 12
+/** Max simulation steps for trajectory preview */
+const PREVIEW_STEPS = 1200
+/** Simulation time step (smaller = more accurate) */
+const DT = 0.012
+/** Max simulation time (seconds) before auto-miss */
+export const MAX_SIM_TIME = PREVIEW_STEPS * DT
+/** Speed scale: converts launch vector pixel length to velocity */
+const SPEED_SCALE = 2.5
+/** Ship collision radius */
+const SHIP_RADIUS = 6
 
 // ─── Vector math helpers ────────────────────────────────────────
 
@@ -30,129 +47,192 @@ export function vecDist(a: Vec2, b: Vec2): number {
   return vecLen(vecSub(a, b))
 }
 
-export function vecAngleDeg(v: Vec2): number {
-  // Returns angle in degrees, 0° = right, positive = counter-clockwise
-  return (Math.atan2(-v.y, v.x) * 180) / Math.PI
-}
-
 export function vecNormalize(v: Vec2): Vec2 {
   const len = vecLen(v)
   if (len === 0) return { x: 0, y: 0 }
   return { x: v.x / len, y: v.y / len }
 }
 
-// ─── Magnitude / direction labels ───────────────────────────────
-
-export function magnitude(v: GameVector): number {
-  return vecDist(v.start, v.end)
+export function vecAngleDeg(v: Vec2): number {
+  return (Math.atan2(-v.y, v.x) * 180) / Math.PI
 }
 
-export function direction(v: GameVector): Vec2 {
-  return vecSub(v.end, v.start)
-}
+// ─── Trajectory simulation ──────────────────────────────────────
 
-// ─── Total fuel used ────────────────────────────────────────────
-
-export function totalFuelUsed(vectors: GameVector[]): number {
-  return vectors.reduce((sum, v) => sum + magnitude(v), 0)
-}
-
-// ─── Resultant vector ───────────────────────────────────────────
-
-export function resultantEnd(vectors: GameVector[]): Vec2 | null {
-  if (vectors.length === 0) return null
-  return vectors[vectors.length - 1].end
-}
-
-// ─── Collision detection ────────────────────────────────────────
-
-/**
- * Check if a line segment from p1 to p2 intersects a circle.
- * Returns the parameter t (0-1) of first intersection, or null.
- */
-export function segmentCircleIntersection(
-  p1: Vec2,
-  p2: Vec2,
-  center: Vec2,
-  radius: number
-): number | null {
-  const d = vecSub(p2, p1)
-  const f = vecSub(p1, center)
-
-  const a = d.x * d.x + d.y * d.y
-  if (a === 0) return null // Degenerate segment (zero length)
-
-  const b = 2 * (f.x * d.x + f.y * d.y)
-  const c = f.x * f.x + f.y * f.y - radius * radius
-
-  let discriminant = b * b - 4 * a * c
-  if (discriminant < 0) return null
-
-  discriminant = Math.sqrt(discriminant)
-
-  const t1 = (-b - discriminant) / (2 * a)
-  const t2 = (-b + discriminant) / (2 * a)
-
-  // Return smallest t in [0, 1]
-  if (t1 >= 0 && t1 <= 1) return t1
-  if (t2 >= 0 && t2 <= 1) return t2
-  return null
+export interface SimResult {
+  /** All positions along the trajectory */
+  path: Vec2[]
+  /** Whether the ship reached the target */
+  reachedTarget: boolean
+  /** Whether the ship hit an asteroid */
+  hitAsteroid: boolean
+  /** Index into path where collision/success occurred (-1 if missed) */
+  endIdx: number
 }
 
 /**
- * Check all vector segments against all asteroids.
- * Returns { hit: true, asteroidIdx, vectorIdx, t, point } or { hit: false }.
+ * Compute gravitational acceleration from all wells at a position.
  */
-export function checkCollisions(
-  vectors: GameVector[],
-  asteroids: Asteroid[]
-): { hit: false } | { hit: true; vectorIdx: number; t: number; point: Vec2 } {
-  for (let vi = 0; vi < vectors.length; vi++) {
-    const v = vectors[vi]
+function computeGravAccel(px: number, py: number, wells: GravityWell[]): Vec2 {
+  let ax = 0
+  let ay = 0
+  for (const well of wells) {
+    const dx = well.x - px
+    const dy = well.y - py
+    const distSq = dx * dx + dy * dy
+    const dist = Math.sqrt(distSq)
+    const clampedDist = Math.max(dist, MIN_DIST)
+    const force = G * well.strength / (clampedDist * clampedDist)
+    const norm = dist > 0 ? 1 / dist : 0
+    ax += dx * norm * force
+    ay += dy * norm * force
+  }
+  return { x: ax, y: ay }
+}
+
+/**
+ * Simulate the ship's trajectory under gravity well influence.
+ * Uses Velocity Verlet integration for stability.
+ */
+export function simulateTrajectory(
+  launch: LaunchVector,
+  wells: GravityWell[],
+  asteroids: Asteroid[],
+  target: Vec2,
+  targetRadius: number,
+  maxSteps: number = PREVIEW_STEPS
+): SimResult {
+  const dir = vecSub(launch.end, launch.start)
+  let vx = dir.x * SPEED_SCALE
+  let vy = dir.y * SPEED_SCALE
+  let px = launch.start.x
+  let py = launch.start.y
+
+  const path: Vec2[] = [{ x: px, y: py }]
+
+  for (let step = 0; step < maxSteps; step++) {
+    // Compute gravitational acceleration at current position
+    const a1 = computeGravAccel(px, py, wells)
+
+    // Velocity Verlet: half-step velocity update
+    vx += a1.x * DT * 0.5
+    vy += a1.y * DT * 0.5
+
+    // Position update
+    px += vx * DT
+    py += vy * DT
+
+    // Recompute acceleration at new position
+    const a2 = computeGravAccel(px, py, wells)
+
+    // Second half-step velocity update
+    vx += a2.x * DT * 0.5
+    vy += a2.y * DT * 0.5
+
+    path.push({ x: px, y: py })
+
+    // Check target reached
+    const distToTarget = Math.sqrt(
+      (px - target.x) * (px - target.x) + (py - target.y) * (py - target.y)
+    )
+    if (distToTarget <= targetRadius) {
+      return { path, reachedTarget: true, hitAsteroid: false, endIdx: path.length - 1 }
+    }
+
+    // Check asteroid collision (line segment from prev to current)
+    const prev = path[path.length - 2]
     for (const ast of asteroids) {
-      const t = segmentCircleIntersection(v.start, v.end, { x: ast.cx, y: ast.cy }, ast.r)
-      if (t !== null) {
-        const d = vecSub(v.end, v.start)
-        return {
-          hit: true,
-          vectorIdx: vi,
-          t,
-          point: { x: v.start.x + d.x * t, y: v.start.y + d.y * t },
-        }
+      if (segmentCircleHit(prev, { x: px, y: py }, { x: ast.cx, y: ast.cy }, ast.r + SHIP_RADIUS)) {
+        return { path, reachedTarget: false, hitAsteroid: true, endIdx: path.length - 1 }
       }
     }
+
+    // Out of bounds check (with generous margin)
+    const margin = 60
+    if (px < -margin || px > BOARD_WIDTH + margin || py < -margin || py > BOARD_HEIGHT + margin) {
+      return { path, reachedTarget: false, hitAsteroid: false, endIdx: path.length - 1 }
+    }
   }
-  return { hit: false }
+
+  return { path, reachedTarget: false, hitAsteroid: false, endIdx: path.length - 1 }
 }
 
-/**
- * Check if the final endpoint is inside the target zone.
- */
-export function reachesTarget(
-  vectors: GameVector[],
-  target: Vec2,
-  targetRadius: number
-): boolean {
-  if (vectors.length === 0) return false
-  const end = vectors[vectors.length - 1].end
-  return vecDist(end, target) <= targetRadius
+/** Check if a line segment from p1→p2 intersects a circle */
+function segmentCircleHit(p1: Vec2, p2: Vec2, center: Vec2, radius: number): boolean {
+  const d = vecSub(p2, p1)
+  const f = vecSub(p1, center)
+  const a = d.x * d.x + d.y * d.y
+  if (a === 0) {
+    // Degenerate segment — check point-in-circle
+    return f.x * f.x + f.y * f.y <= radius * radius
+  }
+  const b = 2 * (f.x * d.x + f.y * d.y)
+  const c = f.x * f.x + f.y * f.y - radius * radius
+  let disc = b * b - 4 * a * c
+  if (disc < 0) return false
+  disc = Math.sqrt(disc)
+  const t1 = (-b - disc) / (2 * a)
+  const t2 = (-b + disc) / (2 * a)
+  return (t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1)
 }
 
 // ─── Scoring ────────────────────────────────────────────────────
 
+/**
+ * Star rating based on gravity well count vs level par.
+ * wellPar wells → 3 stars
+ * wellPar + 1 → 2 stars
+ * wellPar + 2 or more → 1 star
+ * 0 stars if target not reached
+ */
 export function computeStars(
   reached: boolean,
-  vectorCount: number,
-  par: number,
-  fuelUsed: number,
-  fuelBudget: number
+  wellCount: number,
+  wellPar: number
 ): 0 | 1 | 2 | 3 {
   if (!reached) return 0
-  const underPar = vectorCount <= par
-  const underBudget = fuelBudget <= 0 || fuelUsed <= fuelBudget
-  if (underPar && underBudget) return 3
-  if (underPar || underBudget) return 2
+  if (wellCount <= wellPar) return 3
+  if (wellCount <= wellPar + 1) return 2
   return 1
+}
+
+/**
+ * Maximum wells allowed for a level: wellPar + 3
+ */
+export function maxWells(wellPar: number): number {
+  return wellPar + 3
+}
+
+// ─── Utility: check if a point is too close to obstacles ────────
+
+/**
+ * Check if a position is too close to any asteroid or the ship
+ * (to prevent placing wells on top of them).
+ */
+export function isTooClose(
+  pos: Vec2,
+  asteroids: Asteroid[],
+  shipStart: Vec2,
+  target: Vec2,
+  targetRadius: number,
+  wells: GravityWell[],
+  minAsteroidDist: number = 30,
+  minShipDist: number = 30,
+  minWellDist: number = 25
+): boolean {
+  // Too close to asteroids?
+  for (const ast of asteroids) {
+    if (vecDist(pos, { x: ast.cx, y: ast.cy }) < ast.r + minAsteroidDist) return true
+  }
+  // Too close to ship?
+  if (vecDist(pos, shipStart) < minShipDist) return true
+  // Too close to target?
+  if (vecDist(pos, target) < targetRadius + 10) return true
+  // Too close to existing wells?
+  for (const well of wells) {
+    if (vecDist(pos, { x: well.x, y: well.y }) < minWellDist) return true
+  }
+  return false
 }
 
 // ─── Star field generation ──────────────────────────────────────
@@ -175,21 +255,4 @@ export function generateStarField(count: number): Star[] {
     })
   }
   return stars
-}
-
-// ─── Vector palette ─────────────────────────────────────────────
-
-export const VECTOR_COLORS = [
-  '#4fc3f7', // blue
-  '#81c784', // green
-  '#f48fb1', // pink
-  '#ffb74d', // orange
-  '#ce93d8', // purple
-  '#4dd0e1', // teal
-  '#fff176', // yellow
-  '#a1887f', // brown
-]
-
-export function vectorColor(index: number): string {
-  return VECTOR_COLORS[index % VECTOR_COLORS.length]
 }
