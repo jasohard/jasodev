@@ -31,9 +31,18 @@ export interface LevelConfig {
   hint: string | null
   /** Whether this is art mode (no target, no scoring) */
   artMode: boolean
+  /** If true, this is a watch-only level with an animated intro and "I See It!" button */
+  observationMode?: boolean
+  /** Indices of circles whose parameters are fully locked (player can't adjust them) */
+  lockedCircleIndices?: number[]
+  /** A second hint that appears when the player adds a circle (for guided levels) */
+  secondaryHint?: string | null
 }
 
-export type GamePhase = 'playing' | 'complete' | 'levelSelect'
+export type GamePhase = 'playing' | 'complete' | 'levelSelect' | 'observation'
+
+/** Phases of the observation mode animated intro */
+export type ObservationPhase = 'circle1' | 'circle2' | 'combined' | 'done'
 
 export interface GameState {
   /** Current level */
@@ -58,6 +67,10 @@ export interface GameState {
   phase: GamePhase
   /** Wave trace points for player's wave [x, y][] */
   waveTrace: [number, number][]
+  /** Current phase of observation mode intro animation */
+  observationPhase: ObservationPhase
+  /** Whether the secondary hint is currently shown */
+  showSecondaryHint: boolean
 }
 
 export type GameAction =
@@ -76,3 +89,6 @@ export type GameAction =
   | { type: 'GO_TO_LEVEL_SELECT' }
   | { type: 'COMPLETE_LEVEL'; stars: number }
   | { type: 'SET_WAVE_TRACE'; trace: [number, number][] }
+  | { type: 'ADVANCE_OBSERVATION'; phase: ObservationPhase }
+  | { type: 'COMPLETE_OBSERVATION' }
+  | { type: 'DISMISS_SECONDARY_HINT' }

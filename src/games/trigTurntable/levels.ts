@@ -38,7 +38,7 @@ export const LEVELS: LevelConfig[] = [
   {
     id: 3,
     name: 'Shift It',
-    subtitle: 'Phase shifts the wave\'s start',
+    subtitle: "Phase shifts the wave's start",
     targetCircles: [
       { id: 'target-1', amplitude: 1.3, frequency: 1, phase: Math.PI / 3, color: CIRCLE_COLORS[0] },
     ],
@@ -50,26 +50,80 @@ export const LEVELS: LevelConfig[] = [
     artMode: false,
   },
 
-  // ── Level 4: Two Circles ───────────────────────────────
+  // ── Level 4: Wave Cocktail (NEW — Observation Level) ───
   {
     id: 4,
-    name: 'Two Circles',
-    subtitle: 'The sum of two waves',
+    name: 'Wave Cocktail',
+    subtitle: 'Watch two waves become one',
     targetCircles: [
       { id: 'target-1', amplitude: 1.0, frequency: 1, phase: 0, color: CIRCLE_COLORS[0] },
       { id: 'target-2', amplitude: 0.5, frequency: 3, phase: 0, color: CIRCLE_COLORS[1] },
+    ],
+    initialCircleCount: 2,
+    maxCircles: 2,
+    lockedParams: ['amplitude', 'frequency', 'phase'],
+    starThresholds: [0, 0, 0],
+    hint: 'Watch how two waves combine! The bright wave is the SUM of the blue and pink waves at every point.',
+    artMode: false,
+    observationMode: true,
+  },
+
+  // ── Level 5: Wobble Match (NEW — One Circle Locked) ────
+  {
+    id: 5,
+    name: 'Wobble Match',
+    subtitle: 'One circle is set — match the other',
+    targetCircles: [
+      { id: 'target-1', amplitude: 1.2, frequency: 1, phase: Math.PI / 4, color: CIRCLE_COLORS[0] },
+      { id: 'target-2', amplitude: 0.6, frequency: 2, phase: 0, color: CIRCLE_COLORS[1] },
+    ],
+    initialCircleCount: 2,
+    maxCircles: 2,
+    lockedParams: [],
+    starThresholds: [60, 80, 95],
+    hint: 'Circle 2 (pink) is already perfect! Just adjust circle 1 (blue) — tweak its amplitude and phase to match the target.',
+    artMode: false,
+    lockedCircleIndices: [1],
+  },
+
+  // ── Level 6: Build the Wobble (NEW — Guided) ──────────
+  {
+    id: 6,
+    name: 'Build the Wobble',
+    subtitle: 'This wave needs TWO circles',
+    targetCircles: [
+      { id: 'target-1', amplitude: 1.3, frequency: 1, phase: 0, color: CIRCLE_COLORS[0] },
+      { id: 'target-2', amplitude: 0.4, frequency: 4, phase: 0, color: CIRCLE_COLORS[1] },
+    ],
+    initialCircleCount: 1,
+    maxCircles: 2,
+    lockedParams: [],
+    starThresholds: [55, 75, 90],
+    hint: "This wave is bumpy — one circle can't make those bumps! Tap + to add a second circle.",
+    artMode: false,
+    secondaryHint: 'Nice! Circle 2 controls the small ripples. Try amplitude \u2248 0.4, frequency \u2248 4. Then fine-tune circle 1 for the big shape.',
+  },
+
+  // ── Level 7: Two Circles (formerly Level 4) ────────────
+  {
+    id: 7,
+    name: 'Two Circles',
+    subtitle: 'The full challenge',
+    targetCircles: [
+      { id: 'target-1', amplitude: 1.0, frequency: 1, phase: 0, color: CIRCLE_COLORS[0] },
+      { id: 'target-2', amplitude: 0.5, frequency: 3, phase: Math.PI / 6, color: CIRCLE_COLORS[1] },
     ],
     initialCircleCount: 1,
     maxCircles: 4,
     lockedParams: [],
     starThresholds: [60, 80, 92],
-    hint: 'Tap the + button to add a second circle. The compound wave is the SUM of each circle\'s wave!',
+    hint: 'Combine two waves to match the target. Look for the big shape (circle 1) and the small ripples (circle 2).',
     artMode: false,
   },
 
-  // ── Level 5: Make a Square Wave ────────────────────────
+  // ── Level 8: Make a Square Wave (formerly Level 5) ─────
   {
-    id: 5,
+    id: 8,
     name: 'Make a Square Wave',
     subtitle: 'Fourier series in action!',
     targetCircles: [
@@ -88,9 +142,9 @@ export const LEVELS: LevelConfig[] = [
     artMode: false,
   },
 
-  // ── Level 6: Art Mode ──────────────────────────────────
+  // ── Level 9: Art Mode (formerly Level 6) ───────────────
   {
-    id: 6,
+    id: 9,
     name: 'Art Mode',
     subtitle: 'No score, just beauty',
     targetCircles: [],

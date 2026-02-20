@@ -7,7 +7,7 @@
  */
 
 import { useReducer, useCallback, useRef, useEffect, useState, useMemo } from 'react'
-import { gameReducer, initializeLevel } from './gameState'
+import { gameReducer, initializeLevel, isCircleLocked } from './gameState'
 import {
   computeEpicycleTip,
   computeWaveY,
@@ -16,7 +16,7 @@ import {
   generateEquation,
 } from './engine'
 import { LEVELS } from './levels'
-import type { CircleParams } from './types'
+import type { CircleParams, ObservationPhase } from './types'
 import styles from './TrigTurntable.module.css'
 
 // ── Layout constants (SVG viewBox) ──────────────
@@ -30,6 +30,9 @@ const WAVE_X_END = 590 // Where the wave timeline ends
 const WAVE_Y_CENTER = 180 // Center line of the wave
 const WAVE_Y_SCALE = 70 // Pixels per unit amplitude
 const WAVE_NUM_POINTS = 300
+
+// ── Observation mode timing (seconds) ───────────
+const OBS_PHASE_DURATION = 2 // Duration per phase
 
 export default function TrigTurntable() {
   const [state, dispatch] = useReducer(
@@ -50,6 +53,7 @@ export default function TrigTurntable() {
   const {
     level, circles, selectedCircleIndex, time, isPlaying,
     speed, matchScore, stars, levelStars, phase,
+    observationPhase, showSecondaryHint,
   } = state
 
   const selectedCircle = circles[selectedCircleIndex]
@@ -62,7 +66,8 @@ export default function TrigTurntable() {
 
   // ── Animation loop ──────────────────────────────
   useEffect(() => {
-    if (!isPlaying || phase !== 'playing') return
+    if (!isPlaying) return
+    if (phase !== 'playing' && phase !== 'observation') return
 
     lastTimeRef.current = performance.now()
 
@@ -78,9 +83,28 @@ export default function TrigTurntable() {
     return () => cancelAnimationFrame(animRef.current)
   }, [isPlaying, phase])
 
+  // ── Observation mode auto-advance ─────────────────
+  useEffect(() => {
+    if (phase !== 'observation') return
+
+    const sequence: { phase: ObservationPhase; delay: number }[] = [
+      { phase: 'circle2', delay: OBS_PHASE_DURATION * 1000 },
+      { phase: 'combined', delay: OBS_PHASE_DURATION * 2 * 1000 },
+      { phase: 'done', delay: OBS_PHASE_DURATION * 3 * 1000 },
+    ]
+
+    const timers = sequence.map(({ phase: p, delay }) =>
+      window.setTimeout(() => {
+        dispatch({ type: 'ADVANCE_OBSERVATION', phase: p })
+      }, delay)
+    )
+
+    return () => timers.forEach(clearTimeout)
+  }, [phase, level.id])
+
   // ── Score computation (throttled) ───────────────
   useEffect(() => {
-    if (level.artMode || phase !== 'playing') return
+    if (level.artMode || level.observationMode || phase !== 'playing') return
     const score = computeMatchScore(circles, level.targetCircles)
     dispatch({ type: 'UPDATE_SCORE', score })
   }, [circles, level, phase])
@@ -104,8 +128,10 @@ export default function TrigTurntable() {
   // ── Drag handling for amplitude and phase ───────
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (phase !== 'playing') return
+    if (level.observationMode) return
     const pt = svgPoint(e.clientX, e.clientY)
     if (!pt || !selectedCircle) return
+    if (isCircleLocked(level, selectedCircleIndex)) return
 
     // Compute current tip position of selected circle
     const epicycle = computeEpicycleTip(circles.slice(0, selectedCircleIndex + 1), time, CIRCLE_CX, CIRCLE_CY)
@@ -129,7 +155,7 @@ export default function TrigTurntable() {
       svgRef.current?.setPointerCapture(e.pointerId)
       e.preventDefault()
     }
-  }, [phase, svgPoint, selectedCircle, circles, selectedCircleIndex, time])
+  }, [phase, svgPoint, selectedCircle, circles, selectedCircleIndex, time, level])
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!isDraggingAmplitude && !isDraggingPhase) return
@@ -176,8 +202,20 @@ export default function TrigTurntable() {
     return computeEpicycleTip(circles, time, CIRCLE_CX, CIRCLE_CY)
   }, [circles, time])
 
-  // ── Player wave path ────────────────────────────
+  // ── Determine which circles are visible (for observation mode animation) ──
+  const visibleCircleCount = useMemo(() => {
+    if (phase !== 'observation') return circles.length
+    if (observationPhase === 'circle1') return 1
+    return circles.length // circle2, combined, done — all show both circles
+  }, [phase, observationPhase, circles.length])
+
+  const showCombinedWave = phase !== 'observation' || observationPhase === 'combined' || observationPhase === 'done'
+
+  // ── Player wave path (uses visible circles) ────
+  const visibleCircles = useMemo(() => circles.slice(0, visibleCircleCount), [circles, visibleCircleCount])
+
   const playerWavePath = useMemo(() => {
+    if (phase === 'observation' && !showCombinedWave) return ''
     const points: string[] = []
     for (let i = 0; i < WAVE_NUM_POINTS; i++) {
       const frac = i / (WAVE_NUM_POINTS - 1)
@@ -187,11 +225,11 @@ export default function TrigTurntable() {
       points.push(`${x.toFixed(1)},${y.toFixed(1)}`)
     }
     return points.join(' ')
-  }, [circles])
+  }, [circles, phase, showCombinedWave])
 
   // ── Target wave path ────────────────────────────
   const targetWavePath = useMemo(() => {
-    if (level.artMode || level.targetCircles.length === 0) return ''
+    if (level.artMode || level.targetCircles.length === 0 || level.observationMode) return ''
     const points: string[] = []
     for (let i = 0; i < WAVE_NUM_POINTS; i++) {
       const frac = i / (WAVE_NUM_POINTS - 1)
@@ -214,9 +252,12 @@ export default function TrigTurntable() {
   // ── Equation string ─────────────────────────────
   const equation = useMemo(() => generateEquation(circles), [circles])
 
+  // ── Whether this level has multi-circle context ──
+  const isMultiCircleLevel = level.targetCircles.length > 1 || circles.length > 1
+
   // ── Submit score ────────────────────────────────
   const handleSubmit = useCallback(() => {
-    if (level.artMode) return
+    if (level.artMode || level.observationMode) return
     const score = computeMatchScore(circles, level.targetCircles)
     const earnedStars = calculateStars(score, level.starThresholds)
     dispatch({ type: 'UPDATE_SCORE', score })
@@ -244,6 +285,8 @@ export default function TrigTurntable() {
                   <span className={styles.levelName}>{lvl.name}</span>
                   {lvl.artMode ? (
                     <span className={styles.artBadge}>FREE MODE</span>
+                  ) : lvl.observationMode ? (
+                    <span className={styles.obsBadge}>WATCH</span>
                   ) : (
                     <span className={styles.levelStars}>
                       {'★'.repeat(s)}{'☆'.repeat(3 - s)}
@@ -271,7 +314,7 @@ export default function TrigTurntable() {
           </span>
           <span className={styles.levelSubtitle}>{level.subtitle}</span>
         </div>
-        {!level.artMode && (
+        {!level.artMode && !level.observationMode && (
           <div className={styles.scoreInfo}>
             <span
               className={styles.matchScore}
@@ -284,6 +327,11 @@ export default function TrigTurntable() {
             </span>
           </div>
         )}
+        {level.observationMode && (
+          <div className={styles.scoreInfo}>
+            <span className={styles.obsBadgeHeader}>OBSERVATION</span>
+          </div>
+        )}
         {level.artMode && (
           <div className={styles.scoreInfo}>
             <span className={styles.matchScore} style={{ color: '#aed581' }}>
@@ -293,11 +341,23 @@ export default function TrigTurntable() {
         )}
       </div>
 
-      {/* Hint */}
-      {showHint && level.hint && (
+      {/* Primary Hint */}
+      {showHint && level.hint && !level.observationMode && (
         <div className={styles.hintBanner}>
           <span>{level.hint}</span>
           <button className={styles.hintDismiss} onClick={() => setShowHint(false)} aria-label="Dismiss">✕</button>
+        </div>
+      )}
+
+      {/* Secondary Hint (for guided levels, shown after adding a circle) */}
+      {showSecondaryHint && level.secondaryHint && (
+        <div className={styles.secondaryHintBanner}>
+          <span>{level.secondaryHint}</span>
+          <button
+            className={styles.hintDismiss}
+            onClick={() => dispatch({ type: 'DISMISS_SECONDARY_HINT' })}
+            aria-label="Dismiss"
+          >✕</button>
         </div>
       )}
 
@@ -355,7 +415,7 @@ export default function TrigTurntable() {
               <text x={WAVE_X_START - 8} y={WAVE_Y_CENTER + WAVE_Y_SCALE + 3} textAnchor="end">-1</text>
             </g>
 
-            {/* Target wave (ghost) */}
+            {/* Target wave (ghost) — not shown in observation mode */}
             {targetWavePath && (
               <polyline
                 points={targetWavePath}
@@ -369,36 +429,78 @@ export default function TrigTurntable() {
             )}
 
             {/* Difference shading between player and target */}
-            {targetWavePath && !level.artMode && (
+            {targetWavePath && !level.artMode && !level.observationMode && (
               <DifferenceShading
                 playerCircles={circles}
                 targetCircles={level.targetCircles}
               />
             )}
 
-            {/* Individual wave traces per circle (faded) */}
-            {circles.length > 1 && circles.map((c, i) => (
-              <IndividualWave key={c.id} circle={c} opacity={i === selectedCircleIndex ? 0.3 : 0.15} />
-            ))}
+            {/* Individual wave traces per circle (faded) — with labels on multi-circle levels */}
+            {circles.length > 1 && circles.map((c, i) => {
+              // In observation mode, only show visible circles
+              if (phase === 'observation' && i >= visibleCircleCount) return null
+              // Higher opacity on multi-circle levels for better visibility (~0.4 range)
+              const baseOpacity = isMultiCircleLevel ? 0.4 : 0.15
+              const traceOpacity = i === selectedCircleIndex ? Math.min(baseOpacity + 0.1, 0.5) : baseOpacity
+              // Fade-in animation for circle 2 in observation mode
+              const fadeIn = phase === 'observation' && i === 1 && observationPhase === 'circle2'
+              return (
+                <g key={c.id}>
+                  <IndividualWave
+                    circle={c}
+                    opacity={traceOpacity}
+                    fadeIn={fadeIn}
+                  />
+                  {/* Circle label near the wave trace */}
+                  {isMultiCircleLevel && (
+                    <text
+                      x={WAVE_X_START + 4}
+                      y={WAVE_Y_CENTER - c.amplitude * WAVE_Y_SCALE * 0.7 + i * 14}
+                      fill={c.color}
+                      fontSize="8"
+                      fontFamily="sans-serif"
+                      fontWeight="600"
+                      opacity={traceOpacity + 0.15}
+                      clipPath="url(#wave-clip)"
+                    >
+                      {isCircleLocked(level, i) ? `Circle ${i + 1} 🔒` : `Circle ${i + 1}`}
+                    </text>
+                  )}
+                </g>
+              )
+            })}
 
-            {/* Player wave (combined) */}
-            <polyline
-              points={playerWavePath}
-              fill="none"
-              stroke={selectedCircle?.color ?? '#4fc3f7'}
-              strokeWidth="2.5"
-              opacity="0.9"
-              strokeLinejoin="round"
-              clipPath="url(#wave-clip)"
-            />
+            {/* Player wave (combined) — animated entrance in observation mode */}
+            {showCombinedWave && playerWavePath && (
+              <polyline
+                points={playerWavePath}
+                fill="none"
+                stroke={selectedCircle?.color ?? '#4fc3f7'}
+                strokeWidth="2.5"
+                opacity={phase === 'observation' && observationPhase === 'combined' ? 0.7 : 0.9}
+                strokeLinejoin="round"
+                clipPath="url(#wave-clip)"
+                className={phase === 'observation' && observationPhase === 'combined' ? styles.fadeInSvg : undefined}
+              />
+            )}
 
             {/* Epicycle circles */}
             {epicycleData.intermediates.map((inter, i) => {
+              // In observation mode, only show visible circles
+              if (phase === 'observation' && i >= visibleCircleCount) return null
               const circle = circles[i]
-              const isSelected = i === selectedCircleIndex
+              const locked = isCircleLocked(level, i)
+              const isSelected = i === selectedCircleIndex && !locked
               const radius = circle.amplitude * CIRCLE_SCALE
+              // Fade-in for circle 2 in observation mode
+              const fadeIn = phase === 'observation' && i === 1 && observationPhase === 'circle2'
               return (
-                <g key={circle.id} opacity={isSelected ? 1 : 0.5}>
+                <g
+                  key={circle.id}
+                  opacity={isSelected ? 1 : locked ? 0.35 : 0.5}
+                  className={fadeIn ? styles.fadeInSvg : undefined}
+                >
                   {/* Circle orbit */}
                   <circle
                     cx={inter.cx}
@@ -420,14 +522,14 @@ export default function TrigTurntable() {
                     strokeWidth={isSelected ? 2 : 1.5}
                     opacity={isSelected ? 0.8 : 0.4}
                   />
-                  {/* Tip dot (draggable) */}
+                  {/* Tip dot (draggable if not locked) */}
                   <circle
                     cx={inter.tipX}
                     cy={inter.tipY}
                     r={isSelected ? 8 : 5}
                     fill={circle.color}
                     filter={isSelected ? 'url(#glow-blue)' : undefined}
-                    style={{ cursor: isSelected ? 'grab' : 'pointer' }}
+                    style={{ cursor: locked ? 'default' : isSelected ? 'grab' : 'pointer' }}
                   />
                   {/* Center dot */}
                   <circle
@@ -437,8 +539,23 @@ export default function TrigTurntable() {
                     fill={circle.color}
                     opacity={0.4}
                   />
+                  {/* Lock icon on locked circles */}
+                  {locked && (
+                    <g>
+                      <text
+                        x={inter.cx + radius + 6}
+                        y={inter.cy - radius + 6}
+                        fill={circle.color}
+                        fontSize="12"
+                        opacity="0.6"
+                        pointerEvents="none"
+                      >
+                        🔒
+                      </text>
+                    </g>
+                  )}
                   {/* Invisible touch target for tip */}
-                  {isSelected && (
+                  {isSelected && !locked && (
                     <circle
                       cx={inter.tipX}
                       cy={inter.tipY}
@@ -452,40 +569,44 @@ export default function TrigTurntable() {
             })}
 
             {/* Epicycle tip trailing path (spirograph-like) */}
-            <EpicycleTrail circles={circles} time={time} cx={CIRCLE_CX} cy={CIRCLE_CY} />
+            <EpicycleTrail circles={visibleCircles} time={time} cx={CIRCLE_CX} cy={CIRCLE_CY} />
 
             {/* Connection line from final tip to wave */}
-            <line
-              x1={epicycleData.x}
-              y1={epicycleData.y}
-              x2={WAVE_X_START}
-              y2={connectionLineY}
-              stroke={selectedCircle?.color ?? '#4fc3f7'}
-              strokeWidth="1"
-              strokeDasharray="4 4"
-              opacity="0.4"
-            />
+            {showCombinedWave && (
+              <>
+                <line
+                  x1={epicycleData.x}
+                  y1={epicycleData.y}
+                  x2={WAVE_X_START}
+                  y2={connectionLineY}
+                  stroke={selectedCircle?.color ?? '#4fc3f7'}
+                  strokeWidth="1"
+                  strokeDasharray="4 4"
+                  opacity="0.4"
+                />
 
-            {/* Horizontal bar on the connection line at the wave Y position */}
-            <line
-              x1={WAVE_X_START - 2}
-              y1={connectionLineY}
-              x2={WAVE_X_START + 6}
-              y2={connectionLineY}
-              stroke={selectedCircle?.color ?? '#4fc3f7'}
-              strokeWidth="3"
-              strokeLinecap="round"
-              opacity="0.7"
-            />
+                {/* Horizontal bar on the connection line at the wave Y position */}
+                <line
+                  x1={WAVE_X_START - 2}
+                  y1={connectionLineY}
+                  x2={WAVE_X_START + 6}
+                  y2={connectionLineY}
+                  stroke={selectedCircle?.color ?? '#4fc3f7'}
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  opacity="0.7"
+                />
 
-            {/* Animated dot on wave at the connection point */}
-            <circle
-              cx={WAVE_X_START + 4}
-              cy={connectionLineY}
-              r={4}
-              fill={selectedCircle?.color ?? '#4fc3f7'}
-              filter="url(#glow-soft)"
-            />
+                {/* Animated dot on wave at the connection point */}
+                <circle
+                  cx={WAVE_X_START + 4}
+                  cy={connectionLineY}
+                  r={4}
+                  fill={selectedCircle?.color ?? '#4fc3f7'}
+                  filter="url(#glow-soft)"
+                />
+              </>
+            )}
 
             {/* Separator line between circle and wave areas */}
             <line
@@ -497,6 +618,11 @@ export default function TrigTurntable() {
               strokeWidth="1"
               opacity="0.5"
             />
+
+            {/* Observation mode captions */}
+            {phase === 'observation' && (
+              <ObservationCaption observationPhase={observationPhase} circles={circles} />
+            )}
 
             {/* Pulsing ring on selected circle tip while dragging */}
             {(isDraggingAmplitude || isDraggingPhase) && epicycleData.intermediates[selectedCircleIndex] && (
@@ -517,21 +643,42 @@ export default function TrigTurntable() {
           </svg>
         </div>
 
+        {/* Observation mode "I See It!" button */}
+        {phase === 'observation' && observationPhase === 'done' && (
+          <div className={styles.observationOverlay}>
+            <button
+              className={styles.iSeeItBtn}
+              onClick={() => dispatch({ type: 'COMPLETE_OBSERVATION' })}
+            >
+              I See It! →
+            </button>
+          </div>
+        )}
+
         {/* Completion overlay */}
         {phase === 'complete' && (
           <div className={styles.completionOverlay}>
-            <div className={styles.completionTitle}>Level Complete!</div>
+            <div className={styles.completionTitle}>
+              {level.observationMode ? 'Great!' : 'Level Complete!'}
+            </div>
             <div className={styles.completionStars}>
               {'★'.repeat(stars)}{'☆'.repeat(3 - stars)}
             </div>
             <div className={styles.completionMessage}>
-              Match score: {matchScore.toFixed(0)}%
-              <br />
-              {stars === 3 ? 'Perfect match!' : stars === 2 ? 'Great work!' : 'Level cleared!'}
+              {level.observationMode
+                ? 'You learned how two waves combine into one!'
+                : (
+                  <>
+                    Match score: {matchScore.toFixed(0)}%
+                    <br />
+                    {stars === 3 ? 'Perfect match!' : stars === 2 ? 'Great work!' : 'Level cleared!'}
+                  </>
+                )
+              }
             </div>
             <div className={styles.completionActions}>
               <button className={styles.retryButton} onClick={() => dispatch({ type: 'RESET_LEVEL' })}>
-                Retry
+                {level.observationMode ? 'Watch Again' : 'Retry'}
               </button>
               {nextLevelId && (
                 <button className={styles.nextButton} onClick={() => dispatch({ type: 'SELECT_LEVEL', levelId: nextLevelId })}>
@@ -549,129 +696,152 @@ export default function TrigTurntable() {
       {/* Equation display */}
       <div className={styles.equationBar}>{equation}</div>
 
-      {/* Parameter controls */}
-      <div className={styles.controlsPanel}>
-        {/* Circle selector tabs */}
-        <div className={styles.circleSelector}>
-          {circles.map((c, i) => (
-            <button
-              key={c.id}
-              className={i === selectedCircleIndex ? styles.circleTabActive : styles.circleTab}
-              style={{ borderColor: i === selectedCircleIndex ? c.color : 'transparent' }}
-              onClick={() => dispatch({ type: 'SELECT_CIRCLE', index: i })}
-            >
-              <span className={styles.circleTabDot} style={{ background: c.color }} />
-              <span>Circle {i + 1}</span>
-              {circles.length > 1 && (
+      {/* Parameter controls — hidden in observation mode */}
+      {!level.observationMode && (
+        <div className={styles.controlsPanel}>
+          {/* Circle selector tabs */}
+          <div className={styles.circleSelector}>
+            {circles.map((c, i) => {
+              const locked = isCircleLocked(level, i)
+              return (
                 <button
-                  className={styles.removeCircle}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    dispatch({ type: 'REMOVE_CIRCLE', index: i })
+                  key={c.id}
+                  className={
+                    locked
+                      ? styles.circleTabLocked
+                      : i === selectedCircleIndex
+                        ? styles.circleTabActive
+                        : styles.circleTab
+                  }
+                  style={{ borderColor: !locked && i === selectedCircleIndex ? c.color : 'transparent' }}
+                  onClick={() => {
+                    if (!locked) dispatch({ type: 'SELECT_CIRCLE', index: i })
                   }}
-                  aria-label={`Remove circle ${i + 1}`}
+                  aria-disabled={locked}
                 >
-                  ×
+                  <span className={styles.circleTabDot} style={{ background: c.color }} />
+                  <span>
+                    {locked ? `Circle ${i + 1} 🔒` : `Circle ${i + 1}`}
+                  </span>
+                  {!locked && circles.length > 1 && (
+                    <button
+                      className={styles.removeCircle}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        dispatch({ type: 'REMOVE_CIRCLE', index: i })
+                      }}
+                      aria-label={`Remove circle ${i + 1}`}
+                    >
+                      ×
+                    </button>
+                  )}
                 </button>
-              )}
-            </button>
-          ))}
-          {circles.length < level.maxCircles && (
-            <button className={styles.addCircleBtn} onClick={() => dispatch({ type: 'ADD_CIRCLE' })}>
-              + Add
-            </button>
+              )
+            })}
+            {circles.length < level.maxCircles && (
+              <button className={styles.addCircleBtn} onClick={() => dispatch({ type: 'ADD_CIRCLE' })}>
+                + Add
+              </button>
+            )}
+          </div>
+
+          {/* Parameter sliders for selected circle */}
+          {selectedCircle && !isCircleLocked(level, selectedCircleIndex) && (
+            <>
+              {/* Amplitude */}
+              <div className={styles.paramRow}>
+                <span className={styles.paramLabel}>Amp</span>
+                {level.lockedParams.includes('amplitude') ? (
+                  <span className={styles.paramLocked}>Locked ({selectedCircle.amplitude.toFixed(1)})</span>
+                ) : (
+                  <>
+                    <input
+                      type="range"
+                      className={styles.paramSlider}
+                      min="0.1"
+                      max="2.5"
+                      step="0.05"
+                      value={selectedCircle.amplitude}
+                      onChange={(e) => dispatch({
+                        type: 'SET_AMPLITUDE',
+                        circleIndex: selectedCircleIndex,
+                        value: parseFloat(e.target.value),
+                      })}
+                      style={{
+                        accentColor: selectedCircle.color,
+                      }}
+                    />
+                    <span className={styles.paramValue}>{selectedCircle.amplitude.toFixed(2)}</span>
+                  </>
+                )}
+              </div>
+              {/* Frequency */}
+              <div className={styles.paramRow}>
+                <span className={styles.paramLabel}>Freq</span>
+                {level.lockedParams.includes('frequency') ? (
+                  <span className={styles.paramLocked}>Locked ({selectedCircle.frequency})</span>
+                ) : (
+                  <>
+                    <input
+                      type="range"
+                      className={styles.paramSlider}
+                      min="0.5"
+                      max="8"
+                      step="0.5"
+                      value={selectedCircle.frequency}
+                      onChange={(e) => dispatch({
+                        type: 'SET_FREQUENCY',
+                        circleIndex: selectedCircleIndex,
+                        value: parseFloat(e.target.value),
+                      })}
+                      style={{
+                        accentColor: selectedCircle.color,
+                      }}
+                    />
+                    <span className={styles.paramValue}>{selectedCircle.frequency.toFixed(1)}</span>
+                  </>
+                )}
+              </div>
+              {/* Phase */}
+              <div className={styles.paramRow}>
+                <span className={styles.paramLabel}>Phase</span>
+                {level.lockedParams.includes('phase') ? (
+                  <span className={styles.paramLocked}>Locked (0)</span>
+                ) : (
+                  <>
+                    <input
+                      type="range"
+                      className={styles.paramSlider}
+                      min={-Math.PI}
+                      max={Math.PI}
+                      step={0.05}
+                      value={selectedCircle.phase}
+                      onChange={(e) => dispatch({
+                        type: 'SET_PHASE',
+                        circleIndex: selectedCircleIndex,
+                        value: parseFloat(e.target.value),
+                      })}
+                      style={{
+                        accentColor: selectedCircle.color,
+                      }}
+                    />
+                    <span className={styles.paramValue}>
+                      {(selectedCircle.phase / Math.PI).toFixed(2)}π
+                    </span>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Show locked circle info if a locked circle is "selected" somehow */}
+          {selectedCircle && isCircleLocked(level, selectedCircleIndex) && (
+            <div className={styles.lockedInfo}>
+              This circle is locked — select another circle to adjust.
+            </div>
           )}
         </div>
-
-        {/* Parameter sliders for selected circle */}
-        {selectedCircle && (
-          <>
-            {/* Amplitude */}
-            <div className={styles.paramRow}>
-              <span className={styles.paramLabel}>Amp</span>
-              {level.lockedParams.includes('amplitude') ? (
-                <span className={styles.paramLocked}>Locked ({selectedCircle.amplitude.toFixed(1)})</span>
-              ) : (
-                <>
-                  <input
-                    type="range"
-                    className={styles.paramSlider}
-                    min="0.1"
-                    max="2.5"
-                    step="0.05"
-                    value={selectedCircle.amplitude}
-                    onChange={(e) => dispatch({
-                      type: 'SET_AMPLITUDE',
-                      circleIndex: selectedCircleIndex,
-                      value: parseFloat(e.target.value),
-                    })}
-                    style={{
-                      accentColor: selectedCircle.color,
-                    }}
-                  />
-                  <span className={styles.paramValue}>{selectedCircle.amplitude.toFixed(2)}</span>
-                </>
-              )}
-            </div>
-            {/* Frequency */}
-            <div className={styles.paramRow}>
-              <span className={styles.paramLabel}>Freq</span>
-              {level.lockedParams.includes('frequency') ? (
-                <span className={styles.paramLocked}>Locked ({selectedCircle.frequency})</span>
-              ) : (
-                <>
-                  <input
-                    type="range"
-                    className={styles.paramSlider}
-                    min="0.5"
-                    max="8"
-                    step="0.5"
-                    value={selectedCircle.frequency}
-                    onChange={(e) => dispatch({
-                      type: 'SET_FREQUENCY',
-                      circleIndex: selectedCircleIndex,
-                      value: parseFloat(e.target.value),
-                    })}
-                    style={{
-                      accentColor: selectedCircle.color,
-                    }}
-                  />
-                  <span className={styles.paramValue}>{selectedCircle.frequency.toFixed(1)}</span>
-                </>
-              )}
-            </div>
-            {/* Phase */}
-            <div className={styles.paramRow}>
-              <span className={styles.paramLabel}>Phase</span>
-              {level.lockedParams.includes('phase') ? (
-                <span className={styles.paramLocked}>Locked (0)</span>
-              ) : (
-                <>
-                  <input
-                    type="range"
-                    className={styles.paramSlider}
-                    min={-Math.PI}
-                    max={Math.PI}
-                    step={0.05}
-                    value={selectedCircle.phase}
-                    onChange={(e) => dispatch({
-                      type: 'SET_PHASE',
-                      circleIndex: selectedCircleIndex,
-                      value: parseFloat(e.target.value),
-                    })}
-                    style={{
-                      accentColor: selectedCircle.color,
-                    }}
-                  />
-                  <span className={styles.paramValue}>
-                    {(selectedCircle.phase / Math.PI).toFixed(2)}π
-                  </span>
-                </>
-              )}
-            </div>
-          </>
-        )}
-      </div>
+      )}
 
       {/* Transport controls */}
       <div className={styles.transport}>
@@ -687,10 +857,12 @@ export default function TrigTurntable() {
         >
           {speed}×
         </button>
-        <button className={styles.resetBtn} onClick={() => dispatch({ type: 'RESET_LEVEL' })}>
-          Reset
-        </button>
-        {!level.artMode && (
+        {!level.observationMode && (
+          <button className={styles.resetBtn} onClick={() => dispatch({ type: 'RESET_LEVEL' })}>
+            Reset
+          </button>
+        )}
+        {!level.artMode && !level.observationMode && (
           <button className={styles.submitBtn} onClick={handleSubmit}>
             Check
           </button>
@@ -705,7 +877,7 @@ export default function TrigTurntable() {
 /**
  * Renders a single circle's wave contribution as a faded trace.
  */
-function IndividualWave({ circle, opacity }: { circle: CircleParams; opacity: number }) {
+function IndividualWave({ circle, opacity, fadeIn }: { circle: CircleParams; opacity: number; fadeIn?: boolean }) {
   const points = useMemo(() => {
     const pts: string[] = []
     for (let i = 0; i < 200; i++) {
@@ -723,10 +895,11 @@ function IndividualWave({ circle, opacity }: { circle: CircleParams; opacity: nu
       points={points}
       fill="none"
       stroke={circle.color}
-      strokeWidth="1"
+      strokeWidth="1.5"
       opacity={opacity}
       strokeLinejoin="round"
       clipPath="url(#wave-clip)"
+      className={fadeIn ? styles.fadeInSvg : undefined}
     />
   )
 }
@@ -813,5 +986,48 @@ function DifferenceShading({
       fill="rgba(239, 83, 80, 0.12)"
       clipPath="url(#wave-clip)"
     />
+  )
+}
+
+/**
+ * Observation mode captions that appear during the animated intro.
+ */
+function ObservationCaption({
+  observationPhase,
+  circles,
+}: {
+  observationPhase: ObservationPhase
+  circles: CircleParams[]
+}) {
+  const captions: Record<ObservationPhase, string> = {
+    circle1: `Wave 1 (${circles[0]?.color === '#4fc3f7' ? 'blue' : 'circle 1'})`,
+    circle2: `Wave 2 (${circles[1]?.color === '#f06292' ? 'pink' : 'circle 2'}) joins in...`,
+    combined: 'Wave 1 + Wave 2 = Combined Wave',
+    done: 'The thick wave = blue + pink, added at every point!',
+  }
+
+  return (
+    <g className={styles.fadeInSvg}>
+      {/* Semi-transparent background for readability */}
+      <rect
+        x={WAVE_X_START + 10}
+        y={VB_H - 40}
+        width={WAVE_X_END - WAVE_X_START - 20}
+        height={28}
+        rx={6}
+        fill="rgba(0,0,0,0.7)"
+      />
+      <text
+        x={(WAVE_X_START + WAVE_X_END) / 2}
+        y={VB_H - 21}
+        fill="#e8e8f0"
+        fontSize="11"
+        fontFamily="sans-serif"
+        fontWeight="600"
+        textAnchor="middle"
+      >
+        {captions[observationPhase]}
+      </text>
+    </g>
   )
 }

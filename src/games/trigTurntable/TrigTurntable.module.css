@@ -90,6 +90,16 @@
   font-weight: 700;
 }
 
+.obsBadge {
+  font-size: 0.55rem;
+  background: linear-gradient(135deg, #ffd54f, #ffab40);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
 /* ── Header ─────────────────────────────────── */
 
 .header {
@@ -138,6 +148,17 @@
   letter-spacing: 2px;
 }
 
+.obsBadgeHeader {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #ffd54f;
+  background: rgba(255, 213, 79, 0.1);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 213, 79, 0.3);
+}
+
 /* ── Visualization area ─────────────────────── */
 
 .vizArea {
@@ -146,6 +167,7 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  position: relative;
 }
 
 .svgContainer {
@@ -216,6 +238,13 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
+.circleTabLocked {
+  composes: circleTab;
+  background: rgba(255, 255, 255, 0.03);
+  opacity: 0.5;
+  cursor: default;
+}
+
 .circleTabDot {
   width: 10px;
   height: 10px;
@@ -243,6 +272,16 @@
   font-size: 0.75rem;
   color: var(--color-text-muted);
   transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+/* ── Locked circle info ────────────────────── */
+
+.lockedInfo {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: var(--space-sm) 0;
+  opacity: 0.6;
 }
 
 /* ── Sliders ────────────────────────────────── */
@@ -401,6 +440,83 @@
   padding: 0;
 }
 
+/* ── Secondary Hint banner ──────────────────── */
+
+.secondaryHintBanner {
+  padding: var(--space-xs) var(--space-md);
+  background: rgba(174, 213, 129, 0.1);
+  border-bottom: 1px solid rgba(174, 213, 129, 0.2);
+  font-size: 0.72rem;
+  color: #c5e1a5;
+  text-align: center;
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 60px;
+    padding-top: var(--space-xs);
+    padding-bottom: var(--space-xs);
+  }
+}
+
+/* ── Observation mode overlay ───────────────── */
+
+.observationOverlay {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  animation: fadeIn 0.5s ease;
+}
+
+.iSeeItBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 32px;
+  border-radius: 16px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #ffd54f, #ffab40);
+  color: #1a1a2e;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow:
+    0 4px 16px rgba(255, 213, 79, 0.3),
+    0 0 30px rgba(255, 213, 79, 0.15);
+  min-height: var(--tap-target-min);
+}
+
+.iSeeItBtn:active {
+  transform: scale(0.96);
+}
+
+/* ── SVG fade-in animation ──────────────────── */
+
+.fadeInSvg {
+  animation: svgFadeIn 1.5s ease forwards;
+}
+
+@keyframes svgFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* ── Completion overlay ─────────────────────── */
 
 .completionOverlay {
@@ -478,6 +594,13 @@
 
   .transportBtn:hover {
     filter: brightness(1.15);
+  }
+
+  .iSeeItBtn:hover {
+    transform: scale(1.04);
+    box-shadow:
+      0 6px 24px rgba(255, 213, 79, 0.4),
+      0 0 40px rgba(255, 213, 79, 0.2);
   }
 }
 
